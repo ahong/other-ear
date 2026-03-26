@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>灵犀 · 声场问卷 | 城市·风格·艺人</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: #03050a;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: #eef2ff;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 375px;
+            background: #0b0d14;
+            height: 100vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            position: relative;
+            box-shadow: 0 0 40px rgba(0,0,0,0.5);
+            scroll-behavior: smooth;
+        }
+
+        .page {
+            display: none;
+            flex-direction: column;
+            min-height: 100vh;
+            background: #0b0d14;
+        }
+        .page.active {
+            display: flex;
+        }
+
+        /* ========= 开屏页 ========= */
+        .splash {
+            position: relative;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            background: #03050a;
+            overflow: hidden;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+        .splash-content {
+            position: relative;
+            z-index: 2;
+            padding: 2rem;
+        }
+        .ai-badge {
+            background: rgba(255,107,107,0.2);
+            backdrop-filter: blur(4px);
+            border-radius: 30px;
+            padding: 0.3rem 1rem;
+            font-size: 0.7rem;
+            display: inline-block;
+            margin-bottom: 1rem;
+            border: 0.5px solid rgba(255,107,107,0.4);
+        }
+        .logo-big {
+            font-size: 3.8rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #FFB347, #FF6B6B);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.02em;
+        }
+        .sub {
+            color: #9aa2bf;
+            margin-bottom: 2rem;
+            font-size: 0.85rem;
+        }
+        .enter-btn {
+            background: #FF6B6B;
+            border: none;
+            padding: 0.8rem 2rem;
+            border-radius: 40px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: #0f1117;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 0 12px rgba(255,107,107,0.4);
+        }
+        .enter-btn:active {
+            transform: scale(0.97);
+        }
+
+        /* ========= 问卷页 ========= */
+        .questionnaire {
+            padding: 1.2rem;
+            position: relative;
+        }
+        .header-stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+        .step-badge {
+            font-size: 0.75rem;
+            background: #1e2129;
+            padding: 0.2rem 0.8rem;
+            border-radius: 20px;
+        }
+        .selected-count {
+            font-size: 0.75rem;
+            color: #FFB347;
+        }
+        .section {
+            margin-bottom: 1.5rem;
+        }
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.3rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .section-desc {
+            font-size: 0.7rem;
+            color: #9aa2bf;
+            margin-bottom: 0.8rem;
+        }
+        .bubbles-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+        }
+        .bubble {
+            background: #1e2129;
+            padding: 0.5rem 1rem;
+            border-radius: 40px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.1s ease;
+            border: 1px solid transparent;
+        }
+        .bubble.selected {
+            background: #FF6B6B;
+            color: #0f1117;
+            font-weight: 500;
+            border-color: #FFB347;
+            box-shadow: 0 0 6px rgba(255,107,107,0.4);
+        }
+        .artists-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.7rem;
+        }
+        .artist-card {
+            background: #1e2129;
+            padding: 0.7rem 0.3rem;
+            text-align: center;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: 0.1s;
+            border: 1px solid #2f3542;
+            display: flex;
+            flex-direction: column;
+        }
+        .artist-card.selected {
+            background: #FF6B6B;
+            color: #0f1117;
+            border-color: #FFB347;
+        }
+        .artist-sub {
+            font-size: 0.6rem;
+            opacity: 0.7;
+            margin-top: 0.2rem;
+        }
+        .action-btn {
+            width: 100%;
+            background: #FF6B6B;
+            border: none;
+            padding: 0.75rem;
+            border-radius: 40px;
+            font-weight: 600;
+            font-size: 1rem;
+            color: #0f1117;
+            cursor: pointer;
+            margin-top: 0.5rem;
+            transition: 0.2s;
+        }
+        .action-btn.disabled {
+            background: #4a4e62;
+            color: #aaa;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        .back-home {
+            background: transparent;
+            border: 1px solid #3a4050;
+            color: #eef2ff;
+            margin-top: 0.6rem;
+        }
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2a2f3a;
+            padding: 0.5rem 1rem;
+            border-radius: 30px;
+            font-size: 0.75rem;
+            z-index: 2000;
+            display: none;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+        .preview-text {
+            font-size: 0.7rem;
+            color: #9aa2bf;
+            text-align: center;
+            margin-top: 0.5rem;
+        }
+        hr {
+            border-color: #2a2f3a;
+            margin: 0.8rem 0;
+        }
+        @media (max-width: 500px) {
+            .artists-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <!-- 开屏页 -->
+    <div id="splashPage" class="page splash active">
+        <canvas id="soundCanvas"></canvas>
+        <div class="splash-content">
+            <div class="ai-badge">✨ AI 声场感知</div>
+            <div class="logo-big">灵犀</div>
+            <div class="sub">你的一站式演出陪伴AI助手</div>
+            <button class="enter-btn" id="enterBtn">开启声场问卷</button>
+        </div>
+    </div>
+
+    <!-- 问卷页 -->
+    <div id="questionPage" class="page questionnaire">
+        <div class="header-stats">
+            <span class="step-badge">🎧 构建你的声纹</span>
+            <span class="selected-count" id="selectedCountDisplay">🎸 已选 0/5+ 音乐人</span>
+        </div>
+
+        <!-- 城市选择（多选，不计入艺人计数） -->
+        <div class="section">
+            <div class="section-title">📍 你的演出城市圈</div>
+            <div class="section-desc">多选，AI将优先推送这些城市的演出</div>
+            <div class="bubbles-grid" id="citiesGrid"></div>
+        </div>
+        <hr>
+
+        <!-- 风格选择（多选，联动艺人） -->
+        <div class="section">
+            <div class="section-title">🎵 音乐风格</div>
+            <div class="section-desc">多选，为你解锁相应领域的音乐人</div>
+            <div class="bubbles-grid" id="genresGrid"></div>
+        </div>
+
+        <!-- 艺人选择 -->
+        <div class="section">
+            <div class="section-title">🎤 钟爱的音乐人</div>
+            <div class="section-desc">点击添加，至少选5位（可跨风格）</div>
+            <div class="artists-grid" id="artistsGrid"></div>
+            <div id="selectedArtistsPreview" class="preview-text"></div>
+        </div>
+
+        <button id="completeBtn" class="action-btn disabled">✨ 完成，进入灵犀世界</button>
+        <button id="backHomeBtn" class="action-btn back-home">← 返回开屏</button>
+    </div>
+</div>
+<div id="toastMsg" class="toast"></div>
+
+<script>
+    // ---------- 城市数据（国内演出活跃城市） ----------
+    const CITIES = ["北京", "上海", "成都", "广州", "杭州", "南京", "西安", "武汉", "深圳", "厦门"];
+    // 默认推荐城市（根据定位或默认厦门）
+    let defaultCity = "厦门"; // fallback
+
+    // ---------- 风格与艺人数据 ----------
+    const musicData = {
+        "摇滚": {
+            artists: [
+                { name: "万能青年旅店", sub: "独立摇滚" },
+                { name: "二手玫瑰", sub: "民谣摇滚" },
+                { name: "痛仰", sub: "硬摇滚" },
+                { name: "新裤子", sub: "朋克摇滚" },
+                { name: "草东没有派对", sub: "另类摇滚" }
+            ]
+        },
+        "独立": {
+            artists: [
+                { name: "deca joins", sub: "独立/慵懒" },
+                { name: "声音玩具", sub: "独立摇滚" },
+                { name: "海朋森", sub: "后朋克/独立" },
+                { name: "法兹乐队", sub: "后朋克" }
+            ]
+        },
+        "电子": {
+            artists: [
+                { name: "重塑雕像的权利", sub: "电子摇滚" },
+                { name: "超级市场", sub: "电子" },
+                { name: "鸭打鹅", sub: "电子/实验" }
+            ]
+        },
+        "民谣": {
+            artists: [
+                { name: "五条人", sub: "民谣摇滚" },
+                { name: "张玮玮", sub: "民谣" },
+                { name: "小河", sub: "实验民谣" },
+                { name: "周云蓬", sub: "民谣" }
+            ]
+        },
+        "后朋克": {
+            artists: [
+                { name: "法兹乐队", sub: "后朋克" },
+                { name: "海朋森", sub: "后朋克" },
+                { name: "梅卡德尔", sub: "后朋克" }
+            ]
+        }
+    };
+    const genresList = Object.keys(musicData);
+
+    // 全局状态
+    let selectedCities = [];          // 多选城市
+    let selectedGenres = [];          // 多选风格
+    let selectedArtists = [];         // 选中的艺人对象 { name, sub, genre }
+    let currentArtistsPool = [];      // 根据风格动态生成的艺人列表
+
+    // DOM 元素
+    const citiesGrid = document.getElementById('citiesGrid');
+    const genresGrid = document.getElementById('genresGrid');
+    const artistsGrid = document.getElementById('artistsGrid');
+    const selectedCountSpan = document.getElementById('selectedCountDisplay');
+    const selectedPreviewDiv = document.getElementById('selectedArtistsPreview');
+    const completeBtn = document.getElementById('completeBtn');
+    const backHomeBtn = document.getElementById('backHomeBtn');
+    const toastMsg = document.getElementById('toastMsg');
+
+    // 辅助：显示提示
+    function showToast(text) {
+        toastMsg.innerText = text;
+        toastMsg.style.display = 'block';
+        setTimeout(() => {
+            toastMsg.style.display = 'none';
+        }, 2000);
+    }
+
+    // 更新界面（艺人计数、预览、完成按钮）
+    function updateUI() {
+        const artistCount = selectedArtists.length;
+        selectedCountSpan.innerText = `🎸 已选 ${artistCount}/5+ 音乐人`;
+        if (artistCount >= 5) {
+            completeBtn.classList.remove('disabled');
+        } else {
+            completeBtn.classList.add('disabled');
+        }
+        // 预览已选艺人
+        if (selectedArtists.length === 0) {
+            selectedPreviewDiv.innerHTML = '✨ 还没有选择音乐人，点击上方艺人加入';
+        } else {
+            const names = selectedArtists.map(a => a.name).join(' · ');
+            selectedPreviewDiv.innerHTML = `🎵 已选：${names}`;
+        }
+    }
+
+    // 根据选中的风格刷新艺人池（去重，保留完整信息）
+    function refreshArtistsPool() {
+        const artistMap = new Map();
+        selectedGenres.forEach(genre => {
+            const genreArtists = musicData[genre]?.artists || [];
+            genreArtists.forEach(artist => {
+                if (!artistMap.has(artist.name)) {
+                    artistMap.set(artist.name, {
+                        name: artist.name,
+                        sub: artist.sub,
+                        genre: genre
+                    });
+                }
+            });
+        });
+        currentArtistsPool = Array.from(artistMap.values());
+        renderArtistsGrid();
+    }
+
+    // 渲染艺人网格
+    function renderArtistsGrid() {
+        if (selectedGenres.length === 0) {
+            artistsGrid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:2rem; color:#8e96b0;">👆 请先选择音乐风格，AI将为你推荐相关音乐人</div>`;
+            return;
+        }
+        if (currentArtistsPool.length === 0) {
+            artistsGrid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:2rem; color:#8e96b0;">✨ 该风格暂无艺人数据，试试其他风格</div>`;
+            return;
+        }
+        artistsGrid.innerHTML = currentArtistsPool.map(artist => {
+            const isSelected = selectedArtists.some(a => a.name === artist.name);
+            return `
+                <div class="artist-card ${isSelected ? 'selected' : ''}" data-artist-name="${artist.name}" data-sub="${artist.sub}" data-genre="${artist.genre}">
+                    <div>${artist.name}</div>
+                    <div class="artist-sub">${artist.sub}</div>
+                </div>
+            `;
+        }).join('');
+
+        // 绑定点击事件
+        document.querySelectorAll('.artist-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const artistName = card.getAttribute('data-artist-name');
+                const artistSub = card.getAttribute('data-sub');
+                const artistGenre = card.getAttribute('data-genre');
+                const existing = selectedArtists.find(a => a.name === artistName);
+                if (existing) {
+                    selectedArtists = selectedArtists.filter(a => a.name !== artistName);
+                    showToast(`移除了 ${artistName}`);
+                } else {
+                    selectedArtists.push({
+                        name: artistName,
+                        sub: artistSub,
+                        genre: artistGenre
+                    });
+                    showToast(`➕ 添加 ${artistName}`);
+                }
+                updateUI();
+                renderArtistsGrid(); // 重新渲染更新样式
+            });
+        });
+    }
+
+    // 渲染城市网格（多选，默认根据定位选中一个推荐城市）
+    function renderCitiesGrid() {
+        citiesGrid.innerHTML = CITIES.map(city => `
+            <div class="bubble ${selectedCities.includes(city) ? 'selected' : ''}" data-city="${city}">${city}</div>
+        `).join('');
+        document.querySelectorAll('#citiesGrid .bubble').forEach(bubble => {
+            bubble.addEventListener('click', () => {
+                const city = bubble.getAttribute('data-city');
+                if (selectedCities.includes(city)) {
+                    selectedCities = selectedCities.filter(c => c !== city);
+                    showToast(`移除城市 ${city}`);
+                } else {
+                    selectedCities.push(city);
+                    showToast(`添加城市 ${city}`);
+                }
+                renderCitiesGrid();
+                // 城市不影响艺人池，只存储
+            });
+        });
+    }
+
+    // 渲染风格网格
+    function renderGenresGrid() {
+        genresGrid.innerHTML = genresList.map(genre => `
+            <div class="bubble ${selectedGenres.includes(genre) ? 'selected' : ''}" data-genre="${genre}">${genre}</div>
+        `).join('');
+        document.querySelectorAll('#genresGrid .bubble').forEach(bubble => {
+            bubble.addEventListener('click', () => {
+                const genre = bubble.getAttribute('data-genre');
+                if (selectedGenres.includes(genre)) {
+                    selectedGenres = selectedGenres.filter(g => g !== genre);
+                    showToast(`移除风格 “${genre}”`);
+                } else {
+                    selectedGenres.push(genre);
+                    showToast(`添加风格 “${genre}”`);
+                }
+                // 清理不再属于任何选中风格的艺人
+                const validArtists = selectedArtists.filter(artist => selectedGenres.includes(artist.genre));
+                if (validArtists.length !== selectedArtists.length) {
+                    selectedArtists = validArtists;
+                    showToast(`已自动移除不再符合风格的音乐人`);
+                }
+                renderGenresGrid();
+                refreshArtistsPool(); // 重新生成艺人池
+                updateUI();
+            });
+        });
+    }
+
+    // 完成问卷（校验至少5位艺人）
+    function completeQuestionnaire() {
+        if (selectedArtists.length < 5) {
+            showToast(`请至少选择5位你爱的音乐人，当前已选${selectedArtists.length}位`);
+            return;
+        }
+        // 存储偏好到 localStorage
+        const userProfile = {
+            cities: selectedCities,
+            genres: selectedGenres,
+            artists: selectedArtists.map(a => a.name),
+            timestamp: Date.now()
+        };
+        localStorage.setItem('userMusicProfile', JSON.stringify(userProfile));
+        showToast(`🎉 声纹构建完成！已记录 ${selectedArtists.length} 位音乐人，即将进入主应用`);
+        setTimeout(() => {
+            if (confirm('问卷完成！是否返回开屏重新体验？')) {
+                resetToSplash();
+            } else {
+                completeBtn.disabled = true;
+                completeBtn.classList.add('disabled');
+                completeBtn.innerText = '✓ 已完成';
+            }
+        }, 800);
+    }
+
+    // 重置所有状态回到开屏页
+    function resetToSplash() {
+        selectedCities = [];
+        selectedGenres = [];
+        selectedArtists = [];
+        currentArtistsPool = [];
+        // 重新初始化城市默认选中（基于定位或默认）
+        initDefaultCity();
+        renderCitiesGrid();
+        renderGenresGrid();
+        refreshArtistsPool();
+        updateUI();
+        document.getElementById('splashPage').classList.add('active');
+        document.getElementById('questionPage').classList.remove('active');
+        completeBtn.classList.remove('disabled');
+        completeBtn.innerText = '✨ 完成，进入灵犀世界';
+    }
+
+    // 初始化默认城市（根据浏览器地理位置或默认厦门）
+    function initDefaultCity() {
+        // 优先使用浏览器定位（仅演示，若定位失败或拒绝则使用默认厦门）
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    // 这里简单根据经纬度映射城市（真实项目需逆地理编码，此处为演示，我们默认选厦门并保留其他热门城市）
+                    // 为了体验，我们假装定位到厦门（因为示例场景在厦门），但为了通用，默认选中厦门且不加额外城市
+                    if (!selectedCities.includes(defaultCity)) {
+                        selectedCities.push(defaultCity);
+                        renderCitiesGrid();
+                    }
+                },
+                () => {
+                    // 定位失败，使用默认厦门
+                    if (!selectedCities.includes(defaultCity)) {
+                        selectedCities.push(defaultCity);
+                        renderCitiesGrid();
+                    }
+                }
+            );
+        } else {
+            if (!selectedCities.includes(defaultCity)) {
+                selectedCities.push(defaultCity);
+                renderCitiesGrid();
+            }
+        }
+        // 确保初始有一个城市被选中（厦门）
+        if (selectedCities.length === 0) {
+            selectedCities.push(defaultCity);
+        }
+    }
+
+    // 返回开屏
+    function backToSplash() {
+        resetToSplash();
+    }
+
+    // ---------- 开屏 Canvas 动态声场动画 ----------
+    const canvas = document.getElementById('soundCanvas');
+    let ctx = canvas.getContext('2d');
+    let animationId;
+    let timeOffset = 0;
+
+    function resizeCanvas() {
+        const container = document.querySelector('.splash');
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
+    }
+
+    function drawSoundWave() {
+        if (!ctx) return;
+        const w = canvas.width;
+        const h = canvas.height;
+        if (w === 0 || h === 0) return;
+        ctx.clearRect(0, 0, w, h);
+        
+        const grad = ctx.createLinearGradient(0, 0, w, h);
+        grad.addColorStop(0, '#03050a');
+        grad.addColorStop(1, '#121520');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+        
+        ctx.lineWidth = 1.5;
+        for (let i = 0; i < 6; i++) {
+            ctx.beginPath();
+            const yOffset = h * (0.2 + i * 0.12);
+            const amp = 18 + Math.sin(timeOffset * 0.8 + i) * 6;
+            const freq = 0.015;
+            for (let x = 0; x < w; x += 5) {
+                const y = yOffset + Math.sin(x * freq + timeOffset + i) * amp + Math.cos(x * 0.01 + timeOffset * 1.2) * 8;
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.strokeStyle = `rgba(255, 160, 80, ${0.3 + i * 0.05})`;
+            ctx.stroke();
+        }
+        
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 4; i++) {
+            ctx.beginPath();
+            const yBase = h * 0.6 + i * 15;
+            for (let x = 0; x < w; x += 6) {
+                const y = yBase + Math.sin(x * 0.025 + timeOffset * 1.5 + i) * 12;
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.strokeStyle = `rgba(255, 180, 100, 0.5)`;
+            ctx.stroke();
+        }
+        
+        const centerX = w / 2;
+        const centerY = h / 2;
+        const radiusBase = 40 + Math.sin(timeOffset) * 8;
+        for (let r = 0; r < 3; r++) {
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radiusBase + r * 28, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(255, 107, 107, ${0.2 - r * 0.05})`;
+            ctx.stroke();
+        }
+        
+        for (let p = 0; p < 30; p++) {
+            const px = (p * 37) % w;
+            const py = h * 0.3 + Math.sin(p * 0.3 + timeOffset * 2) * 20;
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(px + 8, py + Math.sin(p) * 6);
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = `rgba(255, 200, 100, 0.3)`;
+            ctx.stroke();
+        }
+        
+        timeOffset += 0.025;
+        animationId = requestAnimationFrame(drawSoundWave);
+    }
+
+    function startCanvasAnimation() {
+        if (animationId) cancelAnimationFrame(animationId);
+        resizeCanvas();
+        drawSoundWave();
+        window.addEventListener('resize', () => resizeCanvas());
+    }
+
+    // 初始化问卷（每次进入时重置）
+    function initQuestionnaire() {
+        selectedCities = [];
+        selectedGenres = [];
+        selectedArtists = [];
+        currentArtistsPool = [];
+        initDefaultCity();      // 自动选中一个推荐城市（厦门）
+        renderCitiesGrid();
+        renderGenresGrid();
+        refreshArtistsPool();
+        updateUI();
+    }
+
+    // 事件绑定
+    document.getElementById('enterBtn').addEventListener('click', () => {
+        document.getElementById('splashPage').classList.remove('active');
+        document.getElementById('questionPage').classList.add('active');
+        initQuestionnaire();
+    });
+
+    backHomeBtn.addEventListener('click', backToSplash);
+    completeBtn.addEventListener('click', completeQuestionnaire);
+
+    startCanvasAnimation();
+    window.addEventListener('load', () => resizeCanvas());
+</script>
+</body>
+</html>

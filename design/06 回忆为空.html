@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>回忆 - 我的演出人生</title>
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #03050a;
+    font-family: Arial;
+    color: #eef2ff;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+}
+
+.phone {
+    width: 375px;
+    background: #0b0d14;
+    border-radius: 20px;
+    padding: 16px;
+}
+
+/* 卡片 */
+.card {
+    background: #13161f;
+    border-radius: 16px;
+    padding: 14px;
+    margin-bottom: 14px;
+}
+
+/* 上传 */
+.upload {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px dashed #2a2f3a;
+    cursor: pointer;
+}
+
+.upload-title {
+    font-weight: bold;
+}
+
+.desc {
+    font-size: 12px;
+    color: #9aa2bf;
+}
+
+/* 标题 */
+.section-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+/* 空状态 */
+.empty {
+    text-align: center;
+    padding: 20px 10px;
+    color: #9aa2bf;
+    font-size: 13px;
+}
+
+.empty-big {
+    font-size: 28px;
+    margin-bottom: 8px;
+}
+
+.button {
+    background: #5c7cff;
+    border-radius: 10px;
+    padding: 8px 14px;
+    display: inline-block;
+    margin-top: 10px;
+    font-size: 13px;
+}
+</style>
+
+</head>
+
+<body>
+<div class="phone">
+
+```
+<!-- 上传 -->
+<div class="card upload">
+    <div>📷</div>
+    <div>
+        <div class="upload-title">上传票根截图</div>
+        <div class="desc">AI 自动识别演出记录，生成你的演出人生</div>
+    </div>
+</div>
+
+<!-- 音乐人格 -->
+<div class="card">
+    <div class="section-title">🧠 我的音乐人格</div>
+    <div class="empty">
+        <div class="empty-big">🎧</div>
+        还没有音乐人格数据<br>
+        当你记录 3 场以上演出后<br>
+        AI 会生成你的音乐人格
+    </div>
+</div>
+
+<!-- 年度总结 -->
+<div class="card">
+    <div class="section-title">📊 年度演出总结</div>
+    <div class="empty">
+        <div class="empty-big">📈</div>
+        今年还没有记录演出<br>
+        去看一场现场吧
+    </div>
+</div>
+
+<!-- 巡演城市 -->
+<div class="card">
+    <div class="section-title">🗺️ 巡演足迹城市</div>
+    <div class="empty">
+        <div class="empty-big">🌍</div>
+        你还没有巡演足迹<br>
+        添加一次巡演行程开始记录
+    </div>
+</div>
+
+<!-- 历史记录 -->
+<div class="card">
+    <div class="section-title">📀 历史演出记录</div>
+    <div class="empty">
+        <div class="empty-big">🎫</div>
+        还没有演出记录<br>
+        上传票根或添加行程
+        <div class="button">去添加演出</div>
+    </div>
+</div>
+```
+
+</div>
+</body>
+</html>

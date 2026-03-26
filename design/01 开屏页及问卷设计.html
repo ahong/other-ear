@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>灵犀 · 声场问卷</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: #03050a;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: #eef2ff;
+        }
+
+        /* 移动端容器 */
+        .app-container {
+            width: 100%;
+            max-width: 375px;
+            background: #0b0d14;
+            height: 100vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            position: relative;
+            box-shadow: 0 0 40px rgba(0,0,0,0.5);
+            scroll-behavior: smooth;
+        }
+
+        /* 页面切换 */
+        .page {
+            display: none;
+            flex-direction: column;
+            min-height: 100vh;
+            background: #0b0d14;
+        }
+        .page.active {
+            display: flex;
+        }
+
+        /* ========= 开屏页 ========= */
+        .splash {
+            position: relative;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            background: #03050a;
+            overflow: hidden;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+        .splash-content {
+            position: relative;
+            z-index: 2;
+            padding: 2rem;
+        }
+        .ai-badge {
+            background: rgba(255,107,107,0.2);
+            backdrop-filter: blur(4px);
+            border-radius: 30px;
+            padding: 0.3rem 1rem;
+            font-size: 0.7rem;
+            display: inline-block;
+            margin-bottom: 1rem;
+            border: 0.5px solid rgba(255,107,107,0.4);
+        }
+        .logo-big {
+            font-size: 3.8rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #FFB347, #FF6B6B);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.02em;
+        }
+        .sub {
+            color: #9aa2bf;
+            margin-bottom: 2rem;
+            font-size: 0.85rem;
+        }
+        .enter-btn {
+            background: #FF6B6B;
+            border: none;
+            padding: 0.8rem 2rem;
+            border-radius: 40px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: #0f1117;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 0 12px rgba(255,107,107,0.4);
+        }
+        .enter-btn:active {
+            transform: scale(0.97);
+        }
+
+        /* ========= 问卷页 ========= */
+        .questionnaire {
+            padding: 1.5rem;
+            position: relative;
+        }
+        /* 进度与计数 */
+        .header-stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 1rem;
+        }
+        .step-badge {
+            font-size: 0.8rem;
+            background: #1e2129;
+            padding: 0.2rem 0.8rem;
+            border-radius: 20px;
+        }
+        .selected-count {
+            font-size: 0.8rem;
+            color: #FFB347;
+        }
+        .section-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin: 1rem 0 0.5rem;
+        }
+        .section-desc {
+            font-size: 0.75rem;
+            color: #9aa2bf;
+            margin-bottom: 1rem;
+        }
+
+        /* 泡沫网格 */
+        .bubbles-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.7rem;
+            margin-bottom: 2rem;
+        }
+        .bubble {
+            background: #1e2129;
+            padding: 0.6rem 1.2rem;
+            border-radius: 40px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.1s ease;
+            border: 1px solid transparent;
+        }
+        .bubble.selected {
+            background: #FF6B6B;
+            color: #0f1117;
+            font-weight: 500;
+            border-color: #FFB347;
+            box-shadow: 0 0 8px rgba(255,107,107,0.5);
+        }
+
+        /* 艺人卡片（方形/泡沫混合） */
+        .artists-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.8rem;
+            margin-bottom: 2rem;
+        }
+        .artist-card {
+            background: #1e2129;
+            padding: 0.8rem 0.4rem;
+            text-align: center;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: 0.1s;
+            border: 1px solid #2f3542;
+            display: flex;
+            flex-direction: column;
+        }
+        .artist-card.selected {
+            background: #FF6B6B;
+            color: #0f1117;
+            border-color: #FFB347;
+        }
+        .artist-sub {
+            font-size: 0.65rem;
+            opacity: 0.7;
+            margin-top: 0.2rem;
+        }
+        .action-btn {
+            width: 100%;
+            background: #FF6B6B;
+            border: none;
+            padding: 0.8rem;
+            border-radius: 40px;
+            font-weight: 600;
+            font-size: 1rem;
+            color: #0f1117;
+            cursor: pointer;
+            margin-top: 0.5rem;
+            transition: 0.2s;
+        }
+        .action-btn.disabled {
+            background: #4a4e62;
+            color: #aaa;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        .back-home {
+            background: transparent;
+            border: 1px solid #3a4050;
+            color: #eef2ff;
+            margin-top: 0.8rem;
+        }
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2a2f3a;
+            padding: 0.5rem 1rem;
+            border-radius: 30px;
+            font-size: 0.75rem;
+            z-index: 2000;
+            display: none;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+        @media (max-width: 500px) {
+            .artists-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <!-- 开屏页 -->
+    <div id="splashPage" class="page splash active">
+        <canvas id="soundCanvas"></canvas>
+        <div class="splash-content">
+            <div class="ai-badge">✨ AI 声场感知</div>
+            <div class="logo-big">灵犀</div>
+            <div class="sub">你的一站式演出陪伴AI助手</div>
+            <button class="enter-btn" id="enterBtn">开启声场问卷</button>
+        </div>
+    </div>
+
+    <!-- 问卷页 -->
+    <div id="questionPage" class="page questionnaire">
+        <div class="header-stats">
+            <span class="step-badge">🎧 声纹构建</span>
+            <span class="selected-count" id="selectedCountDisplay">已选 0/5+</span>
+        </div>
+
+        <!-- 风格多选区 -->
+        <div class="section-title">1. 选择你的音乐风格</div>
+        <div class="section-desc">多选，触碰即亮 · AI将为你推荐同频现场</div>
+        <div class="bubbles-grid" id="genresGrid"></div>
+
+        <!-- 艺人推荐区 -->
+        <div class="section-title">2. 选择你爱的音乐人</div>
+        <div class="section-desc">点击艺人加入清单，可跨风格多选</div>
+        <div class="artists-grid" id="artistsGrid"></div>
+
+        <!-- 已选艺人预览（轻量） -->
+        <div id="selectedArtistsPreview" style="font-size:0.7rem; color:#9aa2bf; margin-bottom:0.5rem; text-align:center;"></div>
+
+        <button id="completeBtn" class="action-btn disabled">🎉 完成，进入灵犀世界</button>
+        <button id="backHomeBtn" class="action-btn back-home">← 返回开屏</button>
+    </div>
+</div>
+<div id="toastMsg" class="toast"></div>
+
+<script>
+    // ---------- 数据定义：风格与对应艺人 (细分流派) ----------
+    const musicData = {
+        "摇滚": {
+            artists: [
+                { name: "万能青年旅店", sub: "独立摇滚" },
+                { name: "二手玫瑰", sub: "民谣摇滚" },
+                { name: "痛仰", sub: "硬摇滚" },
+                { name: "新裤子", sub: "朋克摇滚" },
+                { name: "草东没有派对", sub: "另类摇滚" }
+            ]
+        },
+        "独立": {
+            artists: [
+                { name: "deca joins", sub: "独立/慵懒" },
+                { name: "声音玩具", sub: "独立摇滚" },
+                { name: "海朋森", sub: "后朋克/独立" },
+                { name: "法兹乐队", sub: "后朋克" }
+            ]
+        },
+        "电子": {
+            artists: [
+                { name: "重塑雕像的权利", sub: "电子摇滚" },
+                { name: "超级市场", sub: "电子" },
+                { name: "鸭打鹅", sub: "电子/实验" }
+            ]
+        },
+        "民谣": {
+            artists: [
+                { name: "五条人", sub: "民谣摇滚" },
+                { name: "张玮玮", sub: "民谣" },
+                { name: "小河", sub: "实验民谣" },
+                { name: "周云蓬", sub: "民谣" }
+            ]
+        },
+        "后朋克": {
+            artists: [
+                { name: "法兹乐队", sub: "后朋克" },
+                { name: "海朋森", sub: "后朋克" },
+                { name: "梅卡德尔", sub: "后朋克" }
+            ]
+        }
+    };
+
+    // 风格列表
+    const genresList = Object.keys(musicData);
+
+    // 全局状态
+    let selectedGenres = [];        // 选中的风格数组
+    let selectedArtists = [];       // 选中的艺人对象数组 { name, sub, genre }
+    let currentArtistsPool = [];    // 根据选中风格动态生成的艺人列表 (去重)
+
+    // DOM 元素
+    const genresGrid = document.getElementById('genresGrid');
+    const artistsGrid = document.getElementById('artistsGrid');
+    const selectedCountSpan = document.getElementById('selectedCountDisplay');
+    const selectedPreviewDiv = document.getElementById('selectedArtistsPreview');
+    const completeBtn = document.getElementById('completeBtn');
+    const backHomeBtn = document.getElementById('backHomeBtn');
+    const toastMsg = document.getElementById('toastMsg');
+
+    // 辅助：显示短暂提示
+    function showToast(text) {
+        toastMsg.innerText = text;
+        toastMsg.style.display = 'block';
+        setTimeout(() => {
+            toastMsg.style.display = 'none';
+        }, 2000);
+    }
+
+    // 更新界面：已选艺人计数、预览、完成按钮状态
+    function updateUI() {
+        const count = selectedArtists.length;
+        selectedCountSpan.innerText = `已选 ${count}/5+`;
+        if (count >= 5) {
+            completeBtn.classList.remove('disabled');
+        } else {
+            completeBtn.classList.add('disabled');
+        }
+        // 预览已选艺人名字
+        if (selectedArtists.length === 0) {
+            selectedPreviewDiv.innerHTML = '✨ 还没有选择音乐人，点击上方艺人加入';
+        } else {
+            const names = selectedArtists.map(a => a.name).join(' · ');
+            selectedPreviewDiv.innerHTML = `🎸 已选：${names}`;
+        }
+    }
+
+    // 根据当前选中的风格，生成艺人池（去重，保留完整信息）
+    function refreshArtistsPool() {
+        const artistMap = new Map(); // key: name
+        selectedGenres.forEach(genre => {
+            const genreArtists = musicData[genre]?.artists || [];
+            genreArtists.forEach(artist => {
+                if (!artistMap.has(artist.name)) {
+                    artistMap.set(artist.name, {
+                        name: artist.name,
+                        sub: artist.sub,
+                        genre: genre
+                    });
+                }
+            });
+        });
+        currentArtistsPool = Array.from(artistMap.values());
+        renderArtistsGrid();
+    }
+
+    // 渲染艺人网格 (基于 currentArtistsPool)
+    function renderArtistsGrid() {
+        if (selectedGenres.length === 0) {
+            artistsGrid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:2rem; color:#8e96b0;">👆 请先选择音乐风格，AI将为你推荐相关音乐人</div>`;
+            return;
+        }
+        if (currentArtistsPool.length === 0) {
+            artistsGrid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:2rem; color:#8e96b0;">✨ 该风格暂无艺人数据，试试其他风格</div>`;
+            return;
+        }
+        artistsGrid.innerHTML = currentArtistsPool.map(artist => {
+            const isSelected = selectedArtists.some(a => a.name === artist.name);
+            return `
+                <div class="artist-card ${isSelected ? 'selected' : ''}" data-artist-name="${artist.name}" data-sub="${artist.sub}" data-genre="${artist.genre}">
+                    <div>${artist.name}</div>
+                    <div class="artist-sub">${artist.sub}</div>
+                </div>
+            `;
+        }).join('');
+
+        // 绑定点击事件
+        document.querySelectorAll('.artist-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const artistName = card.getAttribute('data-artist-name');
+                const artistSub = card.getAttribute('data-sub');
+                const artistGenre = card.getAttribute('data-genre');
+                const existing = selectedArtists.find(a => a.name === artistName);
+                if (existing) {
+                    // 移除
+                    selectedArtists = selectedArtists.filter(a => a.name !== artistName);
+                    showToast(`移除了 ${artistName}`);
+                } else {
+                    // 添加
+                    selectedArtists.push({
+                        name: artistName,
+                        sub: artistSub,
+                        genre: artistGenre
+                    });
+                    showToast(`➕ 添加 ${artistName}`);
+                }
+                updateUI();
+                renderArtistsGrid();  // 重新渲染更新选中样式
+            });
+        });
+    }
+
+    // 渲染风格泡沫
+    function renderGenresGrid() {
+        genresGrid.innerHTML = genresList.map(genre => `
+            <div class="bubble ${selectedGenres.includes(genre) ? 'selected' : ''}" data-genre="${genre}">${genre}</div>
+        `).join('');
+        // 绑定风格点击事件
+        document.querySelectorAll('.bubble').forEach(bubble => {
+            bubble.addEventListener('click', () => {
+                const genre = bubble.getAttribute('data-genre');
+                if (selectedGenres.includes(genre)) {
+                    // 移除风格
+                    selectedGenres = selectedGenres.filter(g => g !== genre);
+                    showToast(`移除风格 “${genre}”`);
+                } else {
+                    selectedGenres.push(genre);
+                    showToast(`添加风格 “${genre}”`);
+                }
+                // 重新刷新艺人池
+                refreshArtistsPool();
+                renderGenresGrid();  // 更新风格高亮
+                // 注意：刷新艺人池会重新渲染艺人网格，但艺人选中状态需要保留
+                // 但之前 selectedArtists 中可能包含已移除风格下的艺人？需要清理：如果某个艺人所属风格不再被选中，则自动移除该艺人
+                const validArtists = selectedArtists.filter(artist => selectedGenres.includes(artist.genre));
+                if (validArtists.length !== selectedArtists.length) {
+                    selectedArtists = validArtists;
+                    showToast(`已自动移除不再符合风格的音乐人`);
+                    updateUI();
+                }
+                refreshArtistsPool(); // 再次刷新以确保UI一致性
+            });
+        });
+    }
+
+    // 完成问卷（校验至少5位艺人）
+    function completeQuestionnaire() {
+        if (selectedArtists.length < 5) {
+            showToast(`请至少选择5位你爱的音乐人，当前已选${selectedArtists.length}位`);
+            return;
+        }
+        // 存储偏好到 localStorage 模拟进入下一步（实际可跳转，这里演示成功信息）
+        const userProfile = {
+            genres: selectedGenres,
+            artists: selectedArtists.map(a => a.name),
+            timestamp: Date.now()
+        };
+        localStorage.setItem('userMusicProfile', JSON.stringify(userProfile));
+        showToast(`🎉 声纹构建完成！已记录 ${selectedArtists.length} 位音乐人，即将进入主应用`);
+        // 延迟模拟跳转（实际可以跳转，但用户要求仅问卷，这里给出成功反馈并回到开屏或保持）
+        setTimeout(() => {
+            // 可选：跳转回开屏或重置，但为了体验，我们重置页面状态并回到开屏（让用户可以重新体验）
+            if (confirm('问卷完成！是否返回开屏重新体验？')) {
+                resetToSplash();
+            } else {
+                // 保持问卷，但禁用进一步操作
+                completeBtn.disabled = true;
+                completeBtn.classList.add('disabled');
+                completeBtn.innerText = '✓ 已完成';
+            }
+        }, 800);
+    }
+
+    // 重置所有状态回到开屏页
+    function resetToSplash() {
+        // 清空状态
+        selectedGenres = [];
+        selectedArtists = [];
+        currentArtistsPool = [];
+        // 重新渲染风格与艺人
+        renderGenresGrid();
+        refreshArtistsPool();
+        updateUI();
+        // 切换页面
+        document.getElementById('splashPage').classList.add('active');
+        document.getElementById('questionPage').classList.remove('active');
+        // 重置完成按钮样式
+        completeBtn.classList.add('disabled');
+        completeBtn.innerText = '🎉 完成，进入灵犀世界';
+        // 重新开启动画（canvas 持续运行，无需重置）
+    }
+
+    // 返回开屏
+    function backToSplash() {
+        resetToSplash();
+    }
+
+    // ---------- 开屏 Canvas 动态声场动画 ----------
+    const canvas = document.getElementById('soundCanvas');
+    let ctx = canvas.getContext('2d');
+    let animationId;
+    let timeOffset = 0;
+
+    function resizeCanvas() {
+        const container = document.querySelector('.splash');
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
+    }
+
+    function drawSoundWave() {
+        if (!ctx) return;
+        const w = canvas.width;
+        const h = canvas.height;
+        if (w === 0 || h === 0) return;
+        ctx.clearRect(0, 0, w, h);
+        
+        // 渐变背景
+        const grad = ctx.createLinearGradient(0, 0, w, h);
+        grad.addColorStop(0, '#03050a');
+        grad.addColorStop(1, '#121520');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+        
+        // 线条风格：多组流动的正弦波，加上放射状圆环
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = 'rgba(255, 107, 107, 0.7)';
+        ctx.shadowBlur = 0;
+        
+        // 第一组波形
+        for (let i = 0; i < 6; i++) {
+            ctx.beginPath();
+            const yOffset = h * (0.2 + i * 0.12);
+            const amp = 18 + Math.sin(timeOffset * 0.8 + i) * 6;
+            const freq = 0.015;
+            for (let x = 0; x < w; x += 5) {
+                const y = yOffset + Math.sin(x * freq + timeOffset + i) * amp + Math.cos(x * 0.01 + timeOffset * 1.2) * 8;
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.strokeStyle = `rgba(255, 160, 80, ${0.3 + i * 0.05})`;
+            ctx.stroke();
+        }
+        
+        // 第二组 更细的波纹，反向
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 4; i++) {
+            ctx.beginPath();
+            const yBase = h * 0.6 + i * 15;
+            for (let x = 0; x < w; x += 6) {
+                const y = yBase + Math.sin(x * 0.025 + timeOffset * 1.5 + i) * 12;
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.strokeStyle = `rgba(255, 180, 100, 0.5)`;
+            ctx.stroke();
+        }
+        
+        // 放射状线条（声场扩散）
+        const centerX = w / 2;
+        const centerY = h / 2;
+        const radiusBase = 40 + Math.sin(timeOffset) * 8;
+        for (let r = 0; r < 3; r++) {
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radiusBase + r * 28, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(255, 107, 107, ${0.2 - r * 0.05})`;
+            ctx.stroke();
+        }
+        
+        // 随机粒子线条（科技感）
+        for (let p = 0; p < 30; p++) {
+            const px = (p * 37) % w;
+            const py = h * 0.3 + Math.sin(p * 0.3 + timeOffset * 2) * 20;
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(px + 8, py + Math.sin(p) * 6);
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = `rgba(255, 200, 100, 0.3)`;
+            ctx.stroke();
+        }
+        
+        timeOffset += 0.025;
+        animationId = requestAnimationFrame(drawSoundWave);
+    }
+
+    function startCanvasAnimation() {
+        if (animationId) cancelAnimationFrame(animationId);
+        resizeCanvas();
+        drawSoundWave();
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+        });
+    }
+
+    // 初始化问卷数据
+    function initQuestionnaire() {
+        renderGenresGrid();
+        refreshArtistsPool(); // 根据已选风格（初始为空）会显示空状态
+        updateUI();
+    }
+
+    // 页面切换监听
+    document.getElementById('enterBtn').addEventListener('click', () => {
+        document.getElementById('splashPage').classList.remove('active');
+        document.getElementById('questionPage').classList.add('active');
+        initQuestionnaire(); // 每次进入重置状态（也可以保留之前记录？为了体验，重置）
+        // 但为了保留之前用户可能填过，我们这里完全重置问卷（符合首次使用）
+        selectedGenres = [];
+        selectedArtists = [];
+        renderGenresGrid();
+        refreshArtistsPool();
+        updateUI();
+        completeBtn.classList.add('disabled');
+        completeBtn.innerText = '🎉 完成，进入灵犀世界';
+    });
+
+    backHomeBtn.addEventListener('click', backToSplash);
+    completeBtn.addEventListener('click', completeQuestionnaire);
+
+    // 启动动画
+    startCanvasAnimation();
+
+    // 初始时问卷页尚未激活，但保证canvas在开屏页正常
+    // 确保画布尺寸在splash可见时正确
+    window.addEventListener('load', () => {
+        resizeCanvas();
+    });
+</script>
+</body>
+</html>

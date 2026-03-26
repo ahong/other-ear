@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>回忆 - 我的演出人生</title>
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #03050a;
+    font-family: Arial;
+    color: #eef2ff;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+}
+
+.phone {
+    width: 375px;
+    background: #0b0d14;
+    border-radius: 20px;
+    padding: 16px;
+}
+
+/* 卡片通用 */
+.card {
+    background: #13161f;
+    border-radius: 16px;
+    padding: 14px;
+    margin-bottom: 14px;
+}
+
+/* 上传 */
+.upload {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px dashed #2a2f3a;
+}
+
+.upload-title {
+    font-weight: bold;
+}
+
+.desc {
+    font-size: 12px;
+    color: #9aa2bf;
+}
+
+/* 标题 */
+.section-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+/* 标签 */
+.tag {
+    background: #2a2f3a;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    margin-right: 6px;
+}
+
+/* 年度总结 */
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    font-size: 13px;
+}
+
+/* 城市地图 */
+.city-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.city {
+    background: #1e2129;
+    border-radius: 10px;
+    padding: 8px;
+    text-align: center;
+    font-size: 12px;
+}
+
+/* 历史记录 */
+.history-item {
+    background: #1e2129;
+    border-radius: 12px;
+    padding: 10px;
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+}
+
+.band {
+    font-weight: bold;
+}
+
+.date {
+    font-size: 12px;
+    color: #FFB347;
+}
+</style>
+</head>
+
+<body>
+<div class="phone">
+
+    <!-- 上传 -->
+    <div class="card upload">
+        <div>📷</div>
+        <div>
+            <div class="upload-title">上传票根截图</div>
+            <div class="desc">AI 自动识别演出记录</div>
+        </div>
+    </div>
+
+    <!-- 音乐人格 -->
+    <div class="card">
+        <div class="section-title">🧠 我的音乐人格</div>
+        <div>
+            <span class="tag">独立摇滚</span>
+            <span class="tag">Livehouse</span>
+            <span class="tag">华语 indie</span>
+            <span class="tag">后摇</span>
+        </div>
+        <div class="desc" style="margin-top:8px;">
+            你偏好 Livehouse 小场演出，喜欢文学气质和情绪表达浓烈的乐队，
+            经常跨城市追巡演，是典型的「巡演漫游型乐迷」。
+        </div>
+    </div>
+
+    <!-- 年度总结 -->
+    <div class="card">
+        <div class="section-title">📊 2025 年度演出总结</div>
+
+        <div class="stat-row">
+            <div>看过演出</div>
+            <div>12 场</div>
+        </div>
+
+        <div class="stat-row">
+            <div>去过城市</div>
+            <div>5 个</div>
+        </div>
+
+        <div class="stat-row">
+            <div>最常看的乐队</div>
+            <div>万能青年旅店</div>
+        </div>
+
+        <div class="stat-row">
+            <div>最常去 Livehouse</div>
+            <div>疆进酒</div>
+        </div>
+    </div>
+
+    <!-- 巡演城市地图 -->
+    <div class="card">
+        <div class="section-title">🗺️ 巡演足迹城市</div>
+
+        <div class="city-grid">
+            <div class="city">北京 ✔</div>
+            <div class="city">上海 ✔</div>
+            <div class="city">南京 ✔</div>
+            <div class="city">武汉 ✔</div>
+            <div class="city">成都 ✔</div>
+            <div class="city">杭州</div>
+        </div>
+    </div>
+
+    <!-- 历史记录 -->
+    <div class="card">
+        <div class="section-title">📀 历史演出记录</div>
+
+        <div class="history-item">
+            <div>
+                <div class="band">万能青年旅店</div>
+                <div class="desc">冀西南林路行</div>
+            </div>
+            <div class="date">2025-10-15</div>
+        </div>
+
+        <div class="history-item">
+            <div>
+                <div class="band">草东没有派对</div>
+                <div class="desc">瓦合巡演</div>
+            </div>
+            <div class="date">2025-08-20</div>
+        </div>
+
+        <div class="history-item">
+            <div>
+                <div class="band">deca joins</div>
+                <div class="desc">夜间独白</div>
+            </div>
+            <div class="date">2025-06-18</div>
+        </div>
+
+    </div>
+
+</div>
+</body>
+</html>

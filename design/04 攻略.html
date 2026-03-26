@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>行程攻略</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #03050a;
+            font-family: Arial;
+            color: #eef2ff;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .phone-container {
+            width: 375px;
+            background: #0b0d14;
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .page-header {
+            padding: 16px;
+        }
+
+        .guide-list {
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .show-card {
+            background: #13161f;
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .show-header {
+            padding: 16px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .artist-name {
+            color: #FFB347;
+            font-weight: bold;
+        }
+
+        .meta {
+            font-size: 12px;
+            color: #9aa2bf;
+            margin-top: 4px;
+        }
+
+        .guide-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: 0.4s;
+            background: #0f1119;
+        }
+
+        .show-card.expanded .guide-content {
+            max-height: 800px;
+        }
+
+        .timeline {
+            padding: 16px;
+            position: relative;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 20px;
+            top: 20px;
+            bottom: 20px;
+            width: 2px;
+            background: #FF6B6B40;
+        }
+
+        .timeline-item {
+            position: relative;
+            padding-left: 40px;
+            margin-bottom: 16px;
+        }
+
+        .timeline-dot {
+            position: absolute;
+            left: 14px;
+            top: 6px;
+            width: 10px;
+            height: 10px;
+            background: #FF6B6B;
+            border-radius: 50%;
+        }
+
+        .timeline-card {
+            background: #1e2129;
+            border-radius: 12px;
+            padding: 10px;
+            font-size: 13px;
+        }
+
+        .timeline-title {
+            color: #FFB347;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+    </style>
+</head>
+
+<body>
+<div class="phone-container">
+    <div class="page-header">
+        <h2>🗺️ 行程攻略</h2>
+    </div>
+
+    <div class="guide-list" id="guideList"></div>
+</div>
+
+<script>
+const itineraryShows = [
+    {
+        artist: "草东没有派对",
+        tourName: "瓦合巡演",
+        city: "上海",
+        venue: "万代南梦宫",
+        date: "2026-04-12",
+        guideItems: [
+            {time:"15:00", place:"上海科技馆", title:"交通", content:"地铁2号线步行5分钟"},
+            {time:"17:00", place:"后浪青年旅舍", title:"住宿", content:"文艺青年聚集地"},
+            {time:"18:30", place:"O'mills Bakery", title:"美食", content:"独立音乐人常去"},
+            {time:"20:00", place:"万代南梦宫", title:"演出", content:"草东现场"}
+        ]
+    },
+    {
+        artist: "万能青年旅店",
+        tourName: "冀西南林路行",
+        city: "北京",
+        venue: "疆进酒",
+        date: "2026-04-20",
+        guideItems: [
+            {time:"14:00", place:"单向空间", title:"文艺", content:"书店咖啡"},
+            {time:"18:00", place:"北新桥卤煮", title:"美食", content:"北京小吃"},
+            {time:"20:00", place:"疆进酒", title:"演出", content:"万能青年旅店"}
+        ]
+    },
+    {
+        artist: "deca joins",
+        tourName: "夜间独白",
+        city: "成都",
+        venue: "正火艺术中心",
+        date: "2026-04-08",
+        guideItems: [
+            {time:"16:00", place:"东郊记忆", title:"文艺", content:"工业艺术区"},
+            {time:"18:00", place:"小酒馆", title:"美食", content:"音乐人酒吧"},
+            {time:"20:00", place:"正火艺术中心", title:"演出", content:"deca joins"}
+        ]
+    },
+    {
+        artist: "法兹乐队",
+        tourName: "折叠故事",
+        city: "厦门",
+        venue: "RealLive",
+        date: "2026-04-25",
+        guideItems: [
+            {time:"16:00", place:"晓风书屋", title:"文艺", content:"独立书店"},
+            {time:"18:30", place:"沙坡尾", title:"美食", content:"海边餐厅"},
+            {time:"20:00", place:"RealLive", title:"演出", content:"法兹乐队"}
+        ]
+    }
+];
+
+// 按时间排序
+itineraryShows.sort((a,b)=> new Date(a.date)-new Date(b.date));
+
+function renderGuide(){
+    const container = document.getElementById('guideList');
+
+    container.innerHTML = itineraryShows.map((show,index)=>{
+        const timeline = show.guideItems.map(item=>`
+            <div class="timeline-item">
+                <div class="timeline-dot"></div>
+                <div class="timeline-card">
+                    <div class="timeline-title">${item.title}</div>
+                    ⏰ ${item.time}<br>
+                    📍 ${item.place}<br>
+                    ${item.content}
+                </div>
+            </div>
+        `).join('');
+
+        return `
+        <div class="show-card ${index===0?'expanded':''}">
+            <div class="show-header">
+                <div>
+                    <div class="artist-name">${show.artist}</div>
+                    <div>${show.tourName}</div>
+                    <div class="meta">${show.city} · ${show.venue} · ${show.date}</div>
+                </div>
+                <div>▼</div>
+            </div>
+            <div class="guide-content">
+                <div class="timeline">
+                    ${timeline}
+                </div>
+            </div>
+        </div>
+        `;
+    }).join('');
+
+    document.querySelectorAll('.show-header').forEach(header=>{
+        header.addEventListener('click',()=>{
+            header.parentElement.classList.toggle('expanded');
+        });
+    });
+}
+
+renderGuide();
+</script>
+</body>
+</html>
