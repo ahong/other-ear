@@ -1,6 +1,6 @@
 const API_URL = 'https://api.deepseek.com/v1/chat/completions'
 const API_KEY = 'sk-0eeffadba2794f069cf9da72dd6b5029'
-const TIMEOUT_MS = 10000
+const TIMEOUT_MS = 50000
 
 /**
  * 调用 DeepSeek API 生成演出推荐理由
@@ -117,7 +117,8 @@ export async function generateShowGuide(show) {
     const jsonStr = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
     const parsed = JSON.parse(jsonStr)
     return Array.isArray(parsed) ? parsed : []
-  } catch {
+  } catch (error) {
+    console.log(error)
     return []
   } finally {
     clearTimeout(timer)
