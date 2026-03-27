@@ -9,11 +9,12 @@
     <div class="section">
       <div
         class="upload-card"
+        :style="recognizing ? 'opacity:0.6;pointer-events:none' : ''"
         @click="triggerUpload"
       >
-        <div class="upload-icon">📷</div>
+        <div class="upload-icon">{{ recognizing ? '⏳' : '📷' }}</div>
         <div class="upload-text">
-          <div class="upload-title">上传票根截图</div>
+          <div class="upload-title">{{ uploadTitle }}</div>
           <div class="upload-desc">AI 自动识别演出记录，生成你的演出人生</div>
         </div>
         <div class="upload-arrow">+</div>
@@ -33,10 +34,18 @@
       <div class="section">
         <div class="memory-card">
           <div class="card-title">🧠 我的音乐人格</div>
-          <div class="tags-wrap">
-            <span v-for="tag in personalityTags" :key="tag" class="m-tag">{{ tag }}</span>
-          </div>
-          <p class="personality-desc">{{ personalityDesc }}</p>
+          <template v-if="analyzing">
+            <div class="empty-block">
+              <div class="empty-big">⏳</div>
+              <p>AI 正在分析你的音乐偏好…</p>
+            </div>
+          </template>
+          <template v-else>
+            <div class="tags-wrap">
+              <span v-for="tag in personalityTags" :key="tag" class="m-tag">{{ tag }}</span>
+            </div>
+            <p class="personality-desc">{{ personalityDesc }}</p>
+          </template>
         </div>
       </div>
 
@@ -148,108 +157,160 @@
 </template>
 
 <script setup>
-import { ref, computed, inject } from 'vue'
+import { ref, computed, watch, onMounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/index.js'
+import { recognizeShowFromImage } from '../utils/showRecognizer.js'
+import { analyzeMyShows } from '../utils/deepseek.js'
 
 const router = useRouter()
 const store = useUserStore()
 const showToast = inject('showToast')
 const fileInputRef = ref(null)
+const recognizing = ref(false)
 
 const currentYear = new Date().getFullYear()
 
-// 固定历史演出数据（模拟）
-const fixedHistory = [
-  { artist: '万能青年旅店', tourName: '冀西南林路行', date: '2025-10-15', city: '北京' },
-  { artist: '草东没有派对', tourName: '瓦合巡演', date: '2025-08-20', city: '上海' },
-  { artist: 'deca joins', tourName: '夜间独白', date: '2025-06-18', city: '成都' },
-  { artist: '法兹乐队', tourName: '折叠故事', date: '2025-04-05', city: '厦门' },
-  { artist: '声音玩具', tourName: '劳动之余', date: '2024-11-10', city: '南京' },
-]
+// ── 数据源：来自 store.memories（已持久化） ──────────────────────────────
+const myShows = computed(() => store.memories)
 
-// 上传的回忆
-const uploadedMemories = computed(() => store.memories)
+const hasData = computed(() => myShows.value.length > 0)
 
-// 是否有数据：固定历史 + 上传的
-const hasData = computed(() => fixedHistory.length > 0 || uploadedMemories.value.length > 0)
+// 历史记录：按日期倒序
+const allHistoryItems = computed(() =>
+  [...myShows.value]
+    .map(m => ({
+      artist: m.artist,
+      tourName: m.tourName || m.title || '',
+      date: m.date || m.showDate || '',
+      city: m.city || '',
+    }))
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+)
 
-// 所有历史记录
-const allHistoryItems = computed(() => {
-  const fromMemories = uploadedMemories.value.map(m => ({
-    artist: m.artist,
-    tourName: m.tourName || m.name || '',
-    date: m.date,
-    city: m.city || ''
-  }))
-  return [...fromMemories, ...fixedHistory].sort((a, b) => new Date(b.date) - new Date(a.date))
-})
+// ── AI 分析结果 ────────────────────────────────────────────────────────────
+const analysisResult = ref(null)
+const analyzing = ref(false)
 
-// 音乐人格标签
-const personalityTags = computed(() => {
-  const genres = store.profile.genres || []
-  const tags = new Set(['Livehouse', '华语 indie'])
-  if (genres.includes('摇滚')) tags.add('独立摇滚')
-  if (genres.includes('后朋克')) tags.add('后朋克')
-  if (genres.includes('民谣')) tags.add('实验民谣')
-  if (genres.includes('电子')) tags.add('电子实验')
-  if (genres.includes('独立')) tags.add('独立慵懒')
-  return Array.from(tags).slice(0, 5)
-})
+async function runAnalysis() {
+  if (myShows.value.length === 0) { analysisResult.value = null; return }
+  analyzing.value = true
+  const result = await analyzeMyShows(myShows.value)
+  analysisResult.value = result
+  analyzing.value = false
+}
 
-const personalityDesc = computed(() => {
-  return '你偏好 Livehouse 小场演出，喜欢文学气质和情绪表达浓烈的乐队，经常跨城市追巡演，是典型的「巡演漫游型乐迷」。'
-})
+// 页面加载时分析一次；myShows 变化（新增记录）后重新分析
+onMounted(runAnalysis)
+watch(myShows, runAnalysis, { deep: true })
 
-// 年度统计
+// ── 音乐人格 ──────────────────────────────────────────────────────────────
+const personalityTags = computed(
+  () => analysisResult.value?.musicPersonality?.tags?.slice(0, 4) ?? []
+)
+const personalityDesc = computed(
+  () => analysisResult.value?.musicPersonality?.summary ?? ''
+)
+
+// ── 年度统计 ──────────────────────────────────────────────────────────────
 const yearStats = computed(() => {
-  const yearItems = allHistoryItems.value.filter(i => i.date.startsWith(String(currentYear - 1)))
-  const cities = new Set(yearItems.map(i => i.city).filter(Boolean))
-  const artistCounts = {}
-  yearItems.forEach(i => { artistCounts[i.artist] = (artistCounts[i.artist] || 0) + 1 })
-  const favArtist = Object.entries(artistCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '万能青年旅店'
-
+  const ys = analysisResult.value?.yearSummary
   return [
-    { label: '看过演出', value: `${allHistoryItems.value.length} 场` },
-    { label: '去过城市', value: `${Math.max(cities.size, 5)} 个` },
-    { label: '最常看', value: favArtist },
-    { label: '常去场馆', value: '疆进酒' }
+    { label: '看过演出', value: ys ? `${ys.totalShows} 场` : '-' },
+    { label: '去过城市', value: ys ? `${ys.totalCities} 个` : '-' },
+    { label: '最常看',   value: ys?.mostSeenArtist || '-' },
+    { label: '常去场馆', value: ys?.mostVisitedVenue || '-' },
   ]
 })
 
-// 城市足迹
-const visitedCities = computed(() => {
-  const set = new Set(allHistoryItems.value.map(i => i.city).filter(Boolean))
-  set.add('北京'); set.add('上海'); set.add('成都'); set.add('武汉'); set.add('南京')
-  return set
+// ── 城市足迹 ──────────────────────────────────────────────────────────────
+const visitedCitySet = computed(() => {
+  const aiCities = analysisResult.value?.cities ?? []
+  const localCities = myShows.value.map(s => s.city).filter(Boolean)
+  return new Set([...aiCities, ...localCities])
 })
 
 const allCities = computed(() => {
-  const list = ['北京', '上海', '成都', '广州', '杭州', '南京', '西安', '武汉', '深圳', '厦门', '成都', '重庆']
-  const unique = [...new Set(list)]
-  return unique.map(c => ({ name: c, visited: visitedCities.value.has(c) }))
+  // 固定展示城市网格 + AI 返回的城市（去重合并）
+  const base = ['北京', '上海', '成都', '广州', '杭州', '南京', '西安', '武汉', '深圳', '厦门', '重庆', '长沙']
+  const extra = [...visitedCitySet.value].filter(c => !base.includes(c))
+  return [...new Set([...base, ...extra])].map(c => ({
+    name: c,
+    visited: visitedCitySet.value.has(c),
+  }))
 })
 
-// 文件上传
+// ── 文件上传 ──────────────────────────────────────────────────────────────
+// 上传卡片标题（分步提示）
+const uploadStatus = ref('idle') // 'idle' | 'ocr' | 'ai'
+const uploadTitle = computed(() => {
+  if (uploadStatus.value === 'ocr') return 'OCR 正在识别票根文字…'
+  if (uploadStatus.value === 'ai') return 'AI 正在提取演出信息…'
+  return '上传票根截图'
+})
+
 function triggerUpload() {
+  if (recognizing.value) return
   fileInputRef.value?.click()
 }
 
-function handleFileChange(e) {
+async function handleFileChange(e) {
   const file = e.target.files[0]
   if (!file) return
-  showToast('AI 识别中...')
-  setTimeout(() => {
-    const mockData = [
-      { artist: '草东没有派对', tourName: '瓦合巡演', date: '2025-12-01', city: '上海' },
-      { artist: '万能青年旅店', tourName: '冀西南林路行', date: '2025-10-15', city: '北京' },
-      { artist: 'deca joins', tourName: '夜间独白', date: '2025-09-20', city: '成都' }
-    ]
-    const result = mockData[Math.floor(Math.random() * mockData.length)]
-    store.addMemory(result)
-    showToast(`✓ 识别成功：${result.artist} - ${result.tourName}`)
-    e.target.value = ''
-  }, 1200)
+  e.target.value = ''
+
+  recognizing.value = true
+  uploadStatus.value = 'ocr'
+  showToast('OCR 正在识别票根文字…')
+
+  // recognizeShowFromImage 内部：Step1 压缩 → Step2 OCR → Step3 DeepSeek
+  // 在 OCR 完成、进入 DeepSeek 前切换提示（通过 setTimeout 近似模拟，实际由函数内部控制）
+  const aiHintTimer = setTimeout(() => {
+    if (recognizing.value) {
+      uploadStatus.value = 'ai'
+      showToast('AI 正在提取演出信息…')
+    }
+  }, 4000)
+
+  const { data: completed, error } = await recognizeShowFromImage(file)
+
+  clearTimeout(aiHintTimer)
+  recognizing.value = false
+  uploadStatus.value = 'idle'
+
+  if (error) {
+    showToast(error)
+    return
+  }
+  if (completed.length === 0) {
+    showToast('未识别到有效演出记录，请重试')
+    return
+  }
+
+  const existing = store.memories
+  let addedCount = 0
+  for (const r of completed) {
+    const isDup = existing.some(
+      m => m.artist === r.artist && (m.date === r.showDate || m.showDate === r.showDate)
+    )
+    if (!isDup) {
+      store.addMemory({
+        artist: r.artist,
+        tourName: r.title || '',
+        date: r.showDate || '',
+        city: r.city || '',
+        venue: r.venue || '',
+        status: r.status,
+      })
+      addedCount++
+    }
+  }
+
+  if (addedCount > 0) {
+    showToast(`成功添加 ${addedCount} 场演出记录`)
+  } else {
+    showToast('演出记录已存在，无需重复添加')
+  }
 }
 </script>
 

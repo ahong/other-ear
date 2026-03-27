@@ -117,10 +117,85 @@ export async function generateShowGuide(show) {
     const jsonStr = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
     const parsed = JSON.parse(jsonStr)
     return Array.isArray(parsed) ? parsed : []
-  } catch (error) {
-    console.log(error)
+  } catch {
     return []
   } finally {
     clearTimeout(timer)
   }
 }
+
+/**
+ * 调用 DeepSeek API 分析用户演出记录，生成回忆数据
+ * @param {Array} myShows - 演出记录数组，每项包含 { artist, title, city, venue, showDate }
+ * @returns {Promise<Object|null>} 分析结果，失败时返回 null
+ *   结构：{ musicPersonality: { tags, summary }, yearSummary: { totalShows, totalCities, mostSeenArtist, mostVisitedVenue }, cities }
+ */
+export async function analyzeMyShows(myShows) {
+  if (!myShows || myShows.length === 0) return null
+
+  const showList = myShows
+    .map((s, i) => `${i + 1}. 艺人：${s.artist || '未知'}，演出：${s.title || s.tourName || '未知'}，城市：${s.city || '未知'}，场馆：${s.venue || '未知'}，日期：${s.showDate || s.date || '未知'}`)
+    .join('\n')
+
+  const prompt = [
+    '你是一个音乐数据分析助手。请根据以下用户的演出观看记录，生成一份回忆分析报告。',
+    '',
+    '用户演出记录：',
+    showList,
+    '',
+    '严格返回如下 JSON 对象，不要有任何多余文字、解释或 markdown：',
+    '{',
+    '  "musicPersonality": {',
+    '    "tags": ["风格标签1", "风格标签2"],',
+    '    "summary": "100字以内的音乐偏好总结"',
+    '  },',
+    '  "yearSummary": {',
+    '    "totalShows": 总场数,',
+    '    "totalCities": 城市数量,',
+    '    "mostSeenArtist": "最常看的艺人",',
+    '    "mostVisitedVenue": "最常去的场馆"',
+    '  },',
+    '  "cities": ["城市1", "城市2"]',
+    '}',
+    '',
+    '规则：',
+    '- tags 最多4个，从常见独立音乐风格中选：独立摇滚、华语 indie、Livehouse、民谣、后朋克、电子、实验、噪音、爵士、嘻哈',
+    '- summary 结合艺人和城市特征描述用户的乐迷类型，100字以内',
+    '- yearSummary 统计所有记录（不限年份）',
+    '- cities 为所有出现过的城市去重列表',
+    '- 只输出 JSON，不要任何其他内容',
+  ].join('\n')
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 600,
+        temperature: 0.3,
+      }),
+    })
+
+    if (!res.ok) return null
+
+    const data = await res.json()
+    const raw = data?.choices?.[0]?.message?.content?.trim() || ''
+    const jsonStr = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+    const parsed = JSON.parse(jsonStr)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
