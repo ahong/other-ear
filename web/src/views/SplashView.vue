@@ -3,24 +3,15 @@
     <canvas ref="canvasRef" class="sound-canvas" />
 
     <div class="splash-content">
-      <div class="ai-badge">✨ AI 声场感知</div>
-
       <div class="logo-wrap">
+        <div class="logo-en">KEEP ONE EAR FOR LIVE</div>
         <div class="logo-cn">另一只耳</div>
-        <div class="logo-en">OTHER EAR</div>
       </div>
 
-      <p class="sub-text">你的一站式演出陪伴 AI 助手</p>
-
-      <div class="feature-pills">
-        <span class="pill">🎸 演出推荐</span>
-        <span class="pill">📅 智能行程</span>
-        <span class="pill">🗺️ 观演攻略</span>
-        <span class="pill">📸 演出回忆</span>
-      </div>
+      <p class="sub-text">懂你口味的演出推荐 AI</p>
 
       <button class="enter-btn" @click="handleEnter">
-        开启声场问卷
+        看看它懂不懂你
         <span class="btn-arrow">→</span>
       </button>
 
@@ -150,6 +141,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
 .splash {
   position: relative;
   width: 100%;
@@ -180,24 +172,13 @@ onUnmounted(() => {
   text-align: center;
 }
 
-.ai-badge {
-  background: rgba(255, 107, 107, 0.15);
-  backdrop-filter: blur(6px);
-  border: 0.5px solid rgba(255, 107, 107, 0.35);
-  border-radius: 30px;
-  padding: 0.3rem 1rem;
-  font-size: 0.72rem;
-  color: #ff9f9f;
-  letter-spacing: 0.05em;
-  margin-bottom: 1.8rem;
-}
-
 .logo-wrap {
   margin-bottom: 1rem;
 }
 
 .logo-cn {
-  font-size: 3.2rem;
+  font-family: 'ZCOOL KuaiLe', cursive;
+  font-size: 4.2rem;
   font-weight: 800;
   background: linear-gradient(135deg, #FFB347 0%, #FF6B6B 60%, #ff4f8b 100%);
   -webkit-background-clip: text;
@@ -212,31 +193,15 @@ onUnmounted(() => {
   font-weight: 600;
   letter-spacing: 0.28em;
   color: rgba(255, 107, 107, 0.5);
-  margin-top: 0.25rem;
+  margin-bottom: 1rem;
 }
 
 .sub-text {
   color: var(--text-secondary);
-  font-size: 0.85rem;
-  margin-bottom: 1.6rem;
+  font-size: 0.9rem;
+  margin-bottom: 6.4rem;
   line-height: 1.5;
-}
-
-.feature-pills {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5rem;
-  margin-bottom: 2.4rem;
-}
-
-.pill {
-  background: rgba(30, 33, 41, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 20px;
-  padding: 0.3rem 0.75rem;
-  font-size: 0.72rem;
-  color: var(--text-secondary);
+  letter-spacing: 0.5em;
 }
 
 .enter-btn {
