@@ -170,6 +170,95 @@ export async function generateShowGuide(show) {
 }
 
 /**
+ * 根据上一轮搜索上下文动态生成3条追问建议
+ * @param {Object} filter  - 上一轮解析出的 filter { city, style, artist, startTime, endTime }
+ * @param {number} count   - 搜索结果数量
+ * @returns {Promise<string[]>} 3条追问文本，失败时返回空数组
+ */
+export async function generateFollowUpQuestions(filter, count) {
+  const nowTime = new Date().toLocaleString('zh-CN', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+
+  const params = [
+    filter.city      ? `城市：${filter.city}`            : null,
+    filter.style     ? `风格：${filter.style}`           : null,
+    filter.artist    ? `艺人：${filter.artist}`          : null,
+    filter.startTime ? `开始时间：${filter.startTime}`   : null,
+    filter.endTime   ? `结束时间：${filter.endTime}`     : null,
+  ].filter(Boolean).join('，') || '无特定条件'
+
+  const prompt = `你是一个专业的演出推荐AI助手。
+用户刚刚完成一次演出搜索，请根据上下文生成3条自然、合理、绝不重复的追问建议。
+
+【基本信息】
+当前真实时间：${nowTime}
+用户上一轮搜索条件：${params}
+本次搜索结果数量：${count}
+
+【核心铁律】
+1. 绝对禁止出现任何与用户已使用条件完全相同的追问。
+2. 如果用户已经指定了【下个月】，严禁出现"下个月""下个月的呢"这类相同时间段追问，必须改为：
+   - 再下个月
+   - 下下个月
+   - 之后的月份
+   - 后续演出
+3. 如果用户已经指定【本周】，严禁再追问本周，必须改为：
+   - 下周
+   - 下下周
+4. 如果用户已经指定【4月】，严禁再追问4月，必须改为：
+   - 5月
+   - 6月
+   - 之后月份
+5. 已指定城市 → 不重复同一城市
+6. 已指定风格 → 不重复同一风格
+7. 已指定艺人 → 不重复同一艺人
+
+【智能方向】
+- 结果 > 20 条：精筛选 → 只看音乐节？只看周末？只看热门艺人？
+- 结果 < 10 条：扩范围 → 看看附近城市？换个风格？看再下个月？
+- 结果 = 0 条：兜底推荐 → 推荐近期热门？看看全风格？
+
+【格式要求】
+- 口语化、简短（10字内）
+- 只返回 JSON 数组，无多余内容
+["追问1","追问2","追问3"]`
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 8000)
+
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 120,
+        temperature: 0.8,
+      }),
+    })
+
+    if (!res.ok) return []
+
+    const data = await res.json()
+    const raw = data?.choices?.[0]?.message?.content?.trim() || ''
+    const jsonStr = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+    const parsed = JSON.parse(jsonStr)
+    return Array.isArray(parsed) ? parsed.slice(0, 3) : []
+  } catch {
+    return []
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
  * 调用 DeepSeek API 分析用户演出记录，生成回忆数据
  * @param {Array} myShows - 演出记录数组，每项包含 { artist, title, city, venue, showDate }
  * @returns {Promise<Object|null>} 分析结果，失败时返回 null

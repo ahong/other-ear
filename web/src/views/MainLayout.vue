@@ -29,6 +29,14 @@
         <span v-if="store.itinerary.length > 0" class="nav-badge">{{ store.itinerary.length }}</span>
       </div>
       <div
+        class="nav-item nav-item-agent"
+        :class="{ active: agentOpen }"
+        @click="agentOpen = true"
+      >
+        <span class="nav-icon agent-icon">✦</span>
+        <span>Agent</span>
+      </div>
+      <div
         class="nav-item"
         :class="{ active: currentRoute === '/guide' }"
         @click="navigate('/guide')"
@@ -45,6 +53,13 @@
         <span>回忆</span>
       </div>
     </div>
+
+    <!-- Agent 面板：从底部弹出 -->
+    <transition name="agent-slide-up">
+      <div v-if="agentOpen" class="agent-overlay">
+        <AgentView @close="agentOpen = false" />
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -52,12 +67,14 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/index.js'
+import AgentView from './AgentView.vue'
 
 const route = useRoute()
 const router = useRouter()
 const store = useUserStore()
 
 const currentRoute = computed(() => route.path)
+const agentOpen = ref(false)
 
 // Tab 顺序，用于判断滑动方向
 const tabOrder = ['/recommend', '/itinerary', '/guide', '/memory']
@@ -156,6 +173,17 @@ function navigate(path) {
   line-height: 1;
 }
 
+/* Agent 中间按钮 */
+.nav-item-agent {
+  color: var(--primary);
+}
+
+.agent-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+  font-style: normal;
+}
+
 /* Tab 切换动画：向左滑（前进） */
 .tab-slide-left-enter-active,
 .tab-slide-left-leave-active {
@@ -201,5 +229,33 @@ function navigate(path) {
 .tab-fade-enter-from,
 .tab-fade-leave-to {
   opacity: 0;
+}
+
+/* Agent overlay */
+.agent-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 200;
+  background: var(--bg-app);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Agent 从底部弹出动画 */
+.agent-slide-up-enter-active,
+.agent-slide-up-leave-active {
+  transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.agent-slide-up-enter-from,
+.agent-slide-up-leave-to {
+  transform: translateY(100%);
+}
+.agent-slide-up-enter-to,
+.agent-slide-up-leave-from {
+  transform: translateY(0);
 }
 </style>

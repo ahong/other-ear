@@ -12,6 +12,11 @@ const routes = [
     component: () => import('../views/QuestionnaireView.vue'),
   },
   {
+    path: '/agent',
+    name: 'Agent',
+    component: () => import('../views/AgentView.vue'),
+  },
+  {
     // 带底部导航的主布局
     path: '/',
     component: () => import('../views/MainLayout.vue'),

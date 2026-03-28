@@ -61,13 +61,19 @@
               <span v-if="show.price" class="price-tag">{{ show.price }}</span>
             </div>
 
-            <div class="ai-reason">
+            <div v-if="!isShowEnded(show)" class="ai-reason">
               <span class="ai-tag">AI</span>
               {{ getAIReason(show) }}
             </div>
 
             <div class="card-actions">
               <button
+                v-if="isShowEnded(show)"
+                class="action-btn ended"
+                disabled
+              >已结束</button>
+              <button
+                v-else
                 class="action-btn"
                 :class="{ 'in-plan': isInItinerary(show.event_id) }"
                 @click="handleRemind(show)"
@@ -114,13 +120,22 @@
               <div v-if="detailShow.price">🎫 {{ detailShow.price }}</div>
               <div v-if="detailShow.styles?.length">🎵 {{ detailShow.styles.join(' / ') }}</div>
             </div>
-            <div class="modal-ai-reason">
+            <div v-if="!isShowEnded(detailShow)" class="modal-ai-reason">
               <span class="ai-tag">AI 推荐</span>
               {{ getAIReason(detailShow) }}
             </div>
           </div>
           <div class="modal-actions">
-            <button class="action-btn" @click="handleRemind(detailShow); detailShow = null">
+            <button
+              v-if="isShowEnded(detailShow)"
+              class="action-btn ended"
+              disabled
+            >已结束</button>
+            <button
+              v-else
+              class="action-btn"
+              @click="handleRemind(detailShow); detailShow = null"
+            >
               {{ isInItinerary(detailShow.event_id) ? '✓ 已在行程' : '🔔 加入行程' }}
             </button>
             <a v-if="detailShow.event_url" :href="detailShow.event_url" target="_blank" class="action-btn secondary">🎫 秀动购票</a>
@@ -203,6 +218,14 @@ function isInItinerary(showId) {
   return store.itinerary.some(i => i.showId === showId)
 }
 
+// 判断演出是否已结束（演出日期 < 今天）
+function isShowEnded(show) {
+  if (!show?.time) return false
+  const showDate = show.time.slice(0, 10).replace(/\//g, '-')
+  const today = new Date().toISOString().slice(0, 10)
+  return showDate < today
+}
+
 function handleRemind(show) {
   if (isInItinerary(show.event_id)) {
     showToast('已在行程中')
@@ -235,29 +258,29 @@ async function handleSearch() {
   try {
     // 第一步：AI 解析自然语言
     const filter = await parseUserSearchText(q)
+
+    // invalid：输入内容无法识别为演出搜索，Toast 提示后保持原有列表不变
+    if (filter.parseStatus === 'invalid') {
+      showToast(filter.invalidReason || '这个我看不懂，你可以换个说法，比如「上海摇滚演出」', 'top')
+      return
+    }
+
     const hasFilter = filter.city || filter.style || filter.artist || filter.startTime || filter.endTime
 
     if (hasFilter) {
-      // 第二步：多维度匹配打分，满足任意一条件即入选，匹配条件数越多排越前
-      function matchScore(s) {
-        let score = 0
-
-        // 城市/地址
+      // AND 匹配：所有非空维度必须同时满足
+      function matchesAll(s) {
         if (filter.city) {
           const fc = normStr(filter.city)
-          if (normStr(s.city).includes(fc) || normStr(s.venue || '').includes(fc)) score++
+          if (!normStr(s.city).includes(fc) && !normStr(s.venue || '').includes(fc)) return false
         }
-
-        // 音乐风格
         if (filter.style) {
           const fs = normStr(filter.style)
           const hit = (s.styles || []).some(
             st => normStr(st).includes(fs) || fs.includes(normStr(st))
           )
-          if (hit) score++
+          if (!hit) return false
         }
-
-        // 艺人（整体模糊 + × / 分隔拆分）
         if (filter.artist) {
           const fa = normStr(filter.artist)
           const raw = normStr(s.artist || '')
@@ -265,28 +288,23 @@ async function handleSearch() {
           const splitMatch = (s.artist || '').split(/[/×]/).map(n => normStr(n.trim())).some(
             n => n.includes(fa) || fa.includes(n)
           )
-          if (wholeMatch || splitMatch) score++
+          if (!wholeMatch && !splitMatch) return false
         }
-
-        // 演出标题
-        if (filter.artist || filter.style) {
-          const keywords = [filter.artist, filter.style].filter(Boolean).map(normStr)
-          const titleN = normStr(s.title || '')
-          if (keywords.some(k => titleN.includes(k))) score++
-        }
-
-        // 时间段
         if (filter.startTime || filter.endTime) {
-          if (s.time) {
-            const showDate = s.time.slice(0, 10).replace(/\//g, '-')
-            const inRange =
-              (!filter.startTime || showDate >= filter.startTime) &&
-              (!filter.endTime   || showDate <= filter.endTime)
-            if (inRange) score++
-          }
+          if (!s.time) return false
+          const showDate = s.time.slice(0, 10).replace(/\//g, '-')
+          if (filter.startTime && showDate < filter.startTime) return false
+          if (filter.endTime   && showDate > filter.endTime)   return false
         }
+        return true
+      }
 
-        return score
+      // title 加分：仅用于已通过 AND 过滤后的排序（契合度高的排更前）
+      function titleBonus(s) {
+        if (!filter.artist && !filter.style) return 0
+        const keywords = [filter.artist, filter.style].filter(Boolean).map(normStr)
+        const titleN = normStr(s.title || '')
+        return keywords.some(k => titleN.includes(k)) ? 1 : 0
       }
 
       // 解析演出时间戳，用于同分排序
@@ -296,13 +314,8 @@ async function handleSearch() {
       }
 
       const results = allShows
-        .map(s => ({ s, score: matchScore(s) }))
-        .filter(({ score }) => score > 0)           // 至少命中一个维度
-        .sort((a, b) =>
-          b.score - a.score ||                       // 匹配度降序
-          showTimestamp(a.s) - showTimestamp(b.s)    // 同分时间正序
-        )
-        .map(({ s }) => s)
+        .filter(matchesAll)
+        .sort((a, b) => titleBonus(b) - titleBonus(a) || showTimestamp(a) - showTimestamp(b))
 
       searchResults.value = results
     } else {
@@ -342,6 +355,7 @@ const reasonMap = ref({})
 
 // 获取某场演出的展示文案
 function getAIReason(show) {
+  if (isShowEnded(show)) return ''
   const entry = reasonMap.value[show.event_id]
   if (!entry || entry.status === 'loading') return 'AI 正在为你推荐…'
   if (entry.status === 'error') return store.getAIReason(show)
@@ -358,6 +372,7 @@ async function fetchReasons(shows) {
   }
 
   for (const show of shows) {
+    if (isShowEnded(show)) continue   // 已结束演出不调用 AI
     const id = show.event_id
     if (reasonMap.value[id]) continue   // 已有缓存，跳过
 
@@ -664,6 +679,14 @@ watch(displayShows, (shows) => {
   background: #2a4a2a;
   color: #80d890;
   border: 1px solid rgba(100, 200, 120, 0.3);
+}
+
+.action-btn.ended {
+  background: #1e2028;
+  color: #555a68;
+  border: 1px solid #2a2f3a;
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 /* 加载更多 */

@@ -9,7 +9,7 @@
 
     <!-- 全局 Toast -->
     <transition name="toast">
-      <div v-if="toast.visible" class="global-toast">{{ toast.text }}</div>
+      <div v-if="toast.visible" class="global-toast" :class="toast.position">{{ toast.text }}</div>
     </transition>
   </div>
 </template>
@@ -18,11 +18,12 @@
 import { reactive } from 'vue'
 import { provide } from 'vue'
 
-const toast = reactive({ visible: false, text: '', timer: null })
+const toast = reactive({ visible: false, text: '', position: 'bottom', timer: null })
 
-function showToast(text) {
+function showToast(text, position = 'bottom') {
   clearTimeout(toast.timer)
   toast.text = text
+  toast.position = position
   toast.visible = true
   toast.timer = setTimeout(() => { toast.visible = false }, 2200)
 }
@@ -33,7 +34,6 @@ provide('showToast', showToast)
 <style scoped>
 .global-toast {
   position: fixed;
-  bottom: 36px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(42, 47, 58, 0.95);
@@ -48,5 +48,13 @@ provide('showToast', showToast)
   border: 1px solid rgba(255, 107, 107, 0.2);
   max-width: 80%;
   text-align: center;
+  /* 默认底部 */
+  bottom: 36px;
+  top: auto;
+}
+
+.global-toast.top {
+  top: 22%;
+  bottom: auto;
 }
 </style>
