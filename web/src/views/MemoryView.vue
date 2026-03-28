@@ -6,7 +6,7 @@
     </div>
 
     <!-- 上传票根 -->
-    <div class="section">
+    <div class="section upload-section">
       <div
         class="upload-card"
         :style="recognizing ? 'opacity:0.6;pointer-events:none' : ''"
@@ -26,6 +26,10 @@
           @change="handleFileChange"
         />
       </div>
+      <!-- 上传区局部 Toast -->
+      <transition name="upload-toast">
+        <div v-if="uploadToast.visible" class="upload-toast">{{ uploadToast.text }}</div>
+      </transition>
     </div>
 
     <!-- 有数据状态 -->
@@ -93,9 +97,14 @@
               <div class="history-left">
                 <div class="history-artist">{{ item.artist }}</div>
                 <div class="history-tour">{{ item.tourName }}</div>
+                <div v-if="item.price > 0" class="history-price">¥{{ item.price }}</div>
               </div>
               <div class="history-date">{{ item.date }}</div>
             </div>
+          </div>
+          <!-- 累计消费 -->
+          <div v-if="totalSpent > 0" class="history-total">
+            💰 累计观演消费：<span class="total-amount">¥{{ totalSpent }}</span> 元
           </div>
         </div>
       </div>
@@ -157,7 +166,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, inject } from 'vue'
+import { ref, computed, watch, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/index.js'
 import { recognizeShowFromImage } from '../utils/showRecognizer.js'
@@ -165,9 +174,17 @@ import { analyzeMyShows } from '../utils/deepseek.js'
 
 const router = useRouter()
 const store = useUserStore()
-const showToast = inject('showToast')
 const fileInputRef = ref(null)
 const recognizing = ref(false)
+
+// ── 上传区局部 Toast ────────────────────────────────────────────────────────
+const uploadToast = reactive({ visible: false, text: '', timer: null })
+function showUploadToast(text) {
+  clearTimeout(uploadToast.timer)
+  uploadToast.text = text
+  uploadToast.visible = true
+  uploadToast.timer = setTimeout(() => { uploadToast.visible = false }, 2200)
+}
 
 const currentYear = new Date().getFullYear()
 
@@ -184,8 +201,14 @@ const allHistoryItems = computed(() =>
       tourName: m.tourName || m.title || '',
       date: m.date || m.showDate || '',
       city: m.city || '',
+      price: m.price || 0,
     }))
     .sort((a, b) => new Date(b.date) - new Date(a.date))
+)
+
+// 累计消费：只统计有价格数据（price > 0）的场次
+const totalSpent = computed(() =>
+  allHistoryItems.value.reduce((sum, item) => sum + (Number(item.price) || 0), 0)
 )
 
 // ── AI 分析结果 ────────────────────────────────────────────────────────────
@@ -234,10 +257,33 @@ const allCities = computed(() => {
   // 固定展示城市网格 + AI 返回的城市（去重合并）
   const base = ['北京', '上海', '成都', '广州', '杭州', '南京', '西安', '武汉', '深圳', '厦门', '重庆', '长沙']
   const extra = [...visitedCitySet.value].filter(c => !base.includes(c))
-  return [...new Set([...base, ...extra])].map(c => ({
-    name: c,
-    visited: visitedCitySet.value.has(c),
-  }))
+  const allCityNames = [...new Set([...base, ...extra])]
+
+  // 按城市统计观演场次和最近演出时间
+  const cityStats = {}
+  for (const show of myShows.value) {
+    const city = show.city
+    if (!city) continue
+    if (!cityStats[city]) cityStats[city] = { count: 0, latestTs: 0 }
+    cityStats[city].count++
+    const ts = new Date(show.date || show.showDate || '').getTime()
+    if (!isNaN(ts) && ts > cityStats[city].latestTs) cityStats[city].latestTs = ts
+  }
+
+  return allCityNames
+    .map(c => ({
+      name: c,
+      visited: visitedCitySet.value.has(c),
+      _count: cityStats[c]?.count ?? 0,
+      _latestTs: cityStats[c]?.latestTs ?? 0,
+    }))
+    .sort((a, b) => {
+      // 已去过的城市排前，未去过的排后
+      if (a.visited !== b.visited) return a.visited ? -1 : 1
+      // 同为已去过：场次多的排前，场次相同则最近演出时间更近的排前
+      if (b._count !== a._count) return b._count - a._count
+      return b._latestTs - a._latestTs
+    })
 })
 
 // ── 文件上传 ──────────────────────────────────────────────────────────────
@@ -261,14 +307,14 @@ async function handleFileChange(e) {
 
   recognizing.value = true
   uploadStatus.value = 'ocr'
-  showToast('OCR 正在识别票根文字…')
+  showUploadToast('OCR 正在识别票根文字…')
 
   // recognizeShowFromImage 内部：Step1 压缩 → Step2 OCR → Step3 DeepSeek
   // 在 OCR 完成、进入 DeepSeek 前切换提示（通过 setTimeout 近似模拟，实际由函数内部控制）
   const aiHintTimer = setTimeout(() => {
     if (recognizing.value) {
       uploadStatus.value = 'ai'
-      showToast('AI 正在提取演出信息…')
+      showUploadToast('AI 正在提取演出信息…')
     }
   }, 4000)
 
@@ -279,11 +325,11 @@ async function handleFileChange(e) {
   uploadStatus.value = 'idle'
 
   if (error) {
-    showToast(error)
+    showUploadToast(error)
     return
   }
   if (completed.length === 0) {
-    showToast('未识别到有效演出记录，请重试')
+    showUploadToast('未识别到有效演出记录，请重试')
     return
   }
 
@@ -300,6 +346,7 @@ async function handleFileChange(e) {
         date: r.showDate || '',
         city: r.city || '',
         venue: r.venue || '',
+        price: r.price || 0,
         status: r.status,
       })
       addedCount++
@@ -307,9 +354,9 @@ async function handleFileChange(e) {
   }
 
   if (addedCount > 0) {
-    showToast(`成功添加 ${addedCount} 场演出记录`)
+    showUploadToast(`成功添加 ${addedCount} 场演出记录`)
   } else {
-    showToast('演出记录已存在，无需重复添加')
+    showUploadToast('演出记录已存在，无需重复添加')
   }
 }
 </script>
@@ -543,6 +590,27 @@ async function handleFileChange(e) {
   flex-shrink: 0;
 }
 
+.history-price {
+  font-size: 0.7rem;
+  color: #80d890;
+  margin-top: 0.15rem;
+}
+
+.history-total {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid #1e2129;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.total-amount {
+  color: #80d890;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
 /* 空状态 */
 .empty-block {
   text-align: center;
@@ -575,6 +643,41 @@ async function handleFileChange(e) {
   font-weight: 600;
   color: #0f1117;
   cursor: pointer;
+}
+
+/* 上传区块（作为局部 Toast 的定位基准） */
+.upload-section {
+  position: relative;
+}
+
+/* 上传区局部 Toast */
+.upload-toast {
+  position: absolute;
+  bottom: -2.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(42, 47, 58, 0.95);
+  backdrop-filter: blur(8px);
+  padding: 0.4rem 1.1rem;
+  border-radius: 30px;
+  font-size: 0.78rem;
+  color: #eef2ff;
+  z-index: 100;
+  white-space: nowrap;
+  pointer-events: none;
+  border: 1px solid rgba(255, 107, 107, 0.2);
+  max-width: 90%;
+  text-align: center;
+}
+
+.upload-toast-enter-active,
+.upload-toast-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.upload-toast-enter-from,
+.upload-toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-4px);
 }
 
 .add-btn:active {

@@ -2,13 +2,47 @@ const API_URL = 'https://api.deepseek.com/v1/chat/completions'
 const API_KEY = 'sk-0eeffadba2794f069cf9da72dd6b5029'
 const TIMEOUT_MS = 50000
 
+// 推荐理由缓存有效期：7天（毫秒）
+const REASON_CACHE_TTL = 7 * 24 * 60 * 60 * 1000
+const REASON_CACHE_KEY = 'oe_reason_cache'
+
+function loadReasonCache() {
+  try {
+    return JSON.parse(localStorage.getItem(REASON_CACHE_KEY) || '{}')
+  } catch {
+    return {}
+  }
+}
+
+function saveReasonCache(cache) {
+  try {
+    localStorage.setItem(REASON_CACHE_KEY, JSON.stringify(cache))
+  } catch {}
+}
+
+/** 清除所有推荐理由缓存（用户重新提交偏好问卷时调用） */
+export function clearReasonCache() {
+  try {
+    localStorage.removeItem(REASON_CACHE_KEY)
+  } catch {}
+}
+
 /**
- * 调用 DeepSeek API 生成演出推荐理由
+ * 调用 DeepSeek API 生成演出推荐理由（带 localStorage 缓存，7天有效）
  * @param {Object} userPrefs - 用户偏好 { cities: string[], genres: string[], artists: string[] }
- * @param {Object} show      - 演出信息 { title, artist, styles, city, time, price }
+ * @param {Object} show      - 演出信息 { title, artist, styles, city, time, price, event_id }
  * @returns {Promise<string>} 一句推荐语，失败时返回空字符串
  */
 export async function getRecommendationReason(userPrefs, show) {
+  const id = show.event_id
+  if (id) {
+    const cache = loadReasonCache()
+    const entry = cache[id]
+    if (entry && entry.text && Date.now() - entry.savedAt < REASON_CACHE_TTL) {
+      return entry.text
+    }
+  }
+
   const prompt = buildPrompt(userPrefs, show)
 
   const controller = new AbortController()
@@ -33,7 +67,15 @@ export async function getRecommendationReason(userPrefs, show) {
     if (!res.ok) return ''
 
     const data = await res.json()
-    return data?.choices?.[0]?.message?.content?.trim() || ''
+    const text = data?.choices?.[0]?.message?.content?.trim() || ''
+
+    if (text && id) {
+      const cache = loadReasonCache()
+      cache[id] = { text, savedAt: Date.now() }
+      saveReasonCache(cache)
+    }
+
+    return text
   } catch {
     return ''
   } finally {
@@ -46,7 +88,9 @@ function buildPrompt(userPrefs, show) {
   const { title, artist, styles = [], city, time, price } = show
 
   return [
-    '你是一个音乐演出推荐助手，请用一句话（20字以内）告诉用户为什么这场演出适合他，语气自然亲切，不要说废话。',
+    '你是一个资深独立音乐乐迷，请根据用户偏好和当前演出信息，写一句50字的推荐理由，让用户觉得当前演出很适合他。',
+    '要像朋友安利演出一样，不要使用官方介绍语气，不要像广告。',
+    '可以提到音乐风格、现场氛围、情绪感受等，可以使用"如果你喜欢…你可能会喜欢…"等等这类句式，但不要每次都用同一个句式。',
     '',
     `用户偏好城市：${cities.join('、') || '不限'}`,
     `用户喜欢风格：${genres.join('、') || '不限'}`,
@@ -59,17 +103,17 @@ function buildPrompt(userPrefs, show) {
     `演出时间：${time || '未知'}`,
     `票价：${price || '未知'}`,
     '',
-    '直接输出推荐语，不要加任何前缀或解释。',
+    '直接输出推荐语',
   ].join('\n')
 }
 
 /**
  * 调用 DeepSeek API 生成观演攻略时间线
- * @param {Object} show - 演出信息 { title, artist, city, venue, time }
+ * @param {Object} show - 演出信息 { title, artist, city, venue, address, time }
  * @returns {Promise<Array>} 时间线数组，失败时返回空数组
  */
 export async function generateShowGuide(show) {
-  const { title, artist, city, venue, time } = show
+  const { title, artist, city, venue, address, time } = show
   const prompt = [
     '你是一个演出观演攻略生成助手。请根据以下演出信息，生成一份当天的观演时间线攻略。',
     '',
@@ -77,6 +121,7 @@ export async function generateShowGuide(show) {
     `演出艺人：${artist || '未知'}`,
     `演出城市：${city || '未知'}`,
     `演出场地：${venue || '未知'}`,
+    `演出地址：${address || '未知'}`,
     `演出时间：${time || '未知'}`,
     '',
     '严格返回如下 JSON 数组，共4个节点，不要有任何多余文字、解释或 markdown：',

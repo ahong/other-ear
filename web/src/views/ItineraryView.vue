@@ -22,7 +22,7 @@
           <div class="timeline-dot"></div>
           <div class="timeline-card">
             <div class="tl-reminder">
-              ⏰ {{ store.getReminderText(item.ticketDate) }}
+              ⏰ · <span v-if="formatMMDD(item.date)">{{ formatMMDD(item.date) }}</span> {{ store.getReminderText(item.ticketDate) }}
             </div>
             <div class="tl-artist">{{ item.artist }}</div>
             <div class="tl-tour">{{ item.tourName }}</div>
@@ -48,8 +48,22 @@ const router = useRouter()
 const store = useUserStore()
 const showToast = inject('showToast')
 
+function parseDate(dateStr) {
+  if (!dateStr) return Infinity
+  return new Date(dateStr.replace(/\//g, '-')).getTime() || Infinity
+}
+
+function formatMMDD(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr.replace(/\//g, '-'))
+  if (isNaN(d.getTime())) return ''
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${mm}/${dd}`
+}
+
 const sortedItinerary = computed(() => {
-  return [...store.itinerary].sort((a, b) => new Date(a.date) - new Date(b.date))
+  return [...store.itinerary].sort((a, b) => parseDate(a.date) - parseDate(b.date))
 })
 
 function removeItinerary(showId) {
@@ -132,7 +146,7 @@ function goToGuide(item) {
 }
 
 .tl-reminder {
-  font-size: 0.7rem;
+  font-size: 1rem;
   color: var(--accent);
   margin-bottom: 0.3rem;
 }

@@ -2,8 +2,8 @@
   <div class="questionnaire page-scroll">
     <!-- 顶部栏 -->
     <div class="q-header">
-      <button class="back-btn" @click="router.push('/')">←</button>
-      <span class="q-badge">🎧 构建你的声纹</span>
+      <button class="back-btn" @click="router.back()">←</button>
+      <!-- <span class="q-badge">🎧 构建你的声纹</span> -->
       <span class="artist-count" :class="{ enough: selectedArtists.length >= 5 }">
         🎸 {{ selectedArtists.length }}/5+ 音乐人
       </span>
@@ -20,7 +20,10 @@
         <div class="section-title">📍 你的演出城市圈</div>
         <div class="section-desc">多选，AI 将优先推送这些城市的演出</div>
       </div>
-      <div class="bubbles-grid">
+      <div v-if="locating" class="locating-hint">
+        <span class="locating-dot"></span>定位中…
+      </div>
+      <div v-else class="bubbles-grid">
         <div
           v-for="city in sortedCities"
           :key="city"
@@ -102,7 +105,7 @@
       >
         {{ selectedArtists.length < 5 ? `再选 ${5 - selectedArtists.length} 位音乐人` : '✨ 完成，进入另一只耳' }}
       </button>
-      <button class="btn-ghost" @click="router.push('/')">← 返回</button>
+      <button class="btn-ghost" @click="router.back()">← 返回</button>
     </div>
   </div>
 </template>
@@ -111,19 +114,19 @@
 import { ref, computed, inject, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/index.js'
-import { ALL_STYLES, allShows, SCRAPED_CITIES } from '../assets/data/index.js'
-
+import { ALL_STYLES, allShows, SCRAPED_CITIES, ALL_ARTISTS } from '../assets/data/index.js'
+import { genreHotMap, artistHotMap } from '../assets/data/hotData.js'
 const router = useRouter()
 const store = useUserStore()
 const showToast = inject('showToast')
 
 // ============ 数据 ============
 // 城市列表：爬虫城市 + 额外热门城市去重合并
-const EXTRA_CITIES = ['成都', '南京', '西安', '武汉']
+const EXTRA_CITIES = ['成都', '武汉']
 const CITIES = [...new Set([...SCRAPED_CITIES, ...EXTRA_CITIES])]
 
 // 热门城市（固定顺序，排在定位城市/省会之后）
-const HOT_CITIES = ['北京', '上海', '广州', '深圳', '杭州', '厦门', '福州', '成都', '南京', '武汉', '西安', '泉州', '莆田']
+const HOT_CITIES = ['泉州', '深圳', '广州', '杭州', '上海', '北京', '成都', '武汉']
 
 // 城市 → 省会映射（同城市跳过）
 const CITY_TO_CAPITAL = {
@@ -155,7 +158,7 @@ const locating = ref(true)    // 定位中
 const sortedCities = computed(() => {
   const all = [...CITIES]
   const loc = locatedCity.value
-  if (!loc || !all.includes(loc)) return all
+  if (!loc || !all.includes(loc)) return all.slice(0, 10)
 
   const capital = CITY_TO_CAPITAL[loc]
   const result = []
@@ -174,7 +177,7 @@ const sortedCities = computed(() => {
   for (const c of all) {
     if (!result.includes(c)) result.push(c)
   }
-  return result
+  return result.slice(0, 10)
 })
 
 // 逆地理编码：经纬度 → 城市名
@@ -217,20 +220,36 @@ onMounted(async () => {
       const city = matchCity(raw)
       if (city) {
         locatedCity.value = city
-        // 仅当用户还未手动选择城市时，默认勾选定位城市
         if (selectedCities.value.length === 0) {
           selectedCities.value = [city]
+        }
+      } else {
+        // 逆地理编码成功但未匹配到城市，降级到厦门
+        locatedCity.value = '厦门'
+        if (selectedCities.value.length === 0) {
+          selectedCities.value = ['厦门']
         }
       }
       locating.value = false
     },
-    () => { locating.value = false },
+    () => {
+      // 定位失败，默认厦门
+      locatedCity.value = '厦门'
+      if (selectedCities.value.length === 0) {
+        selectedCities.value = ['厦门']
+      }
+      locating.value = false
+    },
     { timeout: 6000, maximumAge: 60000 }
   )
 })
 
 // 风格列表：来自真实数据，按出现频率排序
-const GENRES = ALL_STYLES
+// 风格列表：按 genreHotMap 热度降序排列
+const EXCLUDED_GENRES = new Set(['动漫', '节奏布鲁斯', '极端金属', '世界音乐', '实验'])
+const GENRES = [...ALL_STYLES]
+  .filter(s => !EXCLUDED_GENRES.has(s))
+  .sort((a, b) => (genreHotMap[b] ?? 0) - (genreHotMap[a] ?? 0))
 
 // 根据选中风格，从真实演出数据中聚合艺人池
 // 每个艺人记录：{ name, sub(风格标签), genre(所属第一个匹配风格) }
@@ -251,10 +270,11 @@ const artistsPool = computed(() => {
       }
     })
   })
-  // 按艺人名排序，去掉名字过长的（通常是宣传标题）
+  // 按 artistHotMap 热度降序排列，去掉名字过长的（通常是宣传标题）
   return Array.from(map.values())
     .filter(a => a.name.length <= 16)
-    .sort((a, b) => a.name.localeCompare(b.name, 'zh'))
+    .sort((a, b) => (artistHotMap[b.name] ?? 0) - (artistHotMap[a.name] ?? 0))
+    .slice(0, 20)
 })
 
 // ============ 状态 ============
@@ -430,6 +450,29 @@ function handleComplete() {
   height: 1px;
   background: linear-gradient(90deg, transparent, #252b36, transparent);
   margin: 1.2rem 1.2rem 0;
+}
+
+/* 定位中提示 */
+.locating-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  padding: 0.6rem 0;
+}
+
+.locating-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.6); }
 }
 
 /* 泡泡 */

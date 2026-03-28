@@ -21,6 +21,12 @@
           :disabled="searching"
           @keyup.enter="handleSearch"
         />
+        <button
+          v-if="searchResults !== null || searchQuery"
+          class="search-back-btn"
+          @click="clearSearch"
+          title="退出搜索"
+        >✕</button>
         <button class="search-btn" :disabled="searching" @click="handleSearch">
           {{ searching ? 'AI 解析中' : '搜索' }}
         </button>
@@ -210,6 +216,17 @@ function openDetail(show) {
   detailShow.value = show
 }
 
+// 繁简等价替换表（可按需扩展）
+const TRAD_SIMP_MAP = {
+  '醬': '酱', '樂': '乐', '學': '学', '國': '国', '來': '来', '愛': '爱',
+  '藝': '艺', '無': '无', '聲': '声', '華': '华', '語': '语', '電': '电',
+  '體': '体', '驗': '验', '藍': '蓝', '點': '点', '飛': '飞', '廣': '广',
+}
+function normStr(s) {
+  if (!s) return ''
+  return s.replace(/[醬樂學國來愛藝無聲華語電體驗藍點飛廣]/g, ch => TRAD_SIMP_MAP[ch] || ch).toLowerCase()
+}
+
 async function handleSearch() {
   const q = searchQuery.value.trim()
   if (!q) { searchResults.value = null; resetPage(); return }
@@ -221,39 +238,72 @@ async function handleSearch() {
     const hasFilter = filter.city || filter.style || filter.artist || filter.startTime || filter.endTime
 
     if (hasFilter) {
-      // 第二步：按结构化条件筛选全量演出数据（allShows，不受偏好排序影响）
-      const results = allShows.filter(s => {
-        // city：精确匹配（city 字段由 index.js 注入）
-        if (filter.city && s.city !== filter.city) return false
+      // 第二步：多维度匹配打分，满足任意一条件即入选，匹配条件数越多排越前
+      function matchScore(s) {
+        let score = 0
 
-        // style：styles 数组中任意一项与 filter.style 互相包含
+        // 城市/地址
+        if (filter.city) {
+          const fc = normStr(filter.city)
+          if (normStr(s.city).includes(fc) || normStr(s.venue || '').includes(fc)) score++
+        }
+
+        // 音乐风格
         if (filter.style) {
-          const matched = (s.styles || []).some(
-            st => st.includes(filter.style) || filter.style.includes(st)
+          const fs = normStr(filter.style)
+          const hit = (s.styles || []).some(
+            st => normStr(st).includes(fs) || fs.includes(normStr(st))
           )
-          if (!matched) return false
+          if (hit) score++
         }
 
-        // artist：按 / 拆分后模糊匹配
+        // 艺人（整体模糊 + × / 分隔拆分）
         if (filter.artist) {
-          const showArtists = (s.artist || '').split('/').map(n => n.trim())
-          const matched = showArtists.some(
-            n => n.includes(filter.artist) || filter.artist.includes(n)
+          const fa = normStr(filter.artist)
+          const raw = normStr(s.artist || '')
+          const wholeMatch = raw.includes(fa) || fa.includes(raw)
+          const splitMatch = (s.artist || '').split(/[/×]/).map(n => normStr(n.trim())).some(
+            n => n.includes(fa) || fa.includes(n)
           )
-          if (!matched) return false
+          if (wholeMatch || splitMatch) score++
         }
 
-        // time：show.time 格式为 "2026/03/27 20:00"，统一转为 "YYYY-MM-DD" 再比较
+        // 演出标题
+        if (filter.artist || filter.style) {
+          const keywords = [filter.artist, filter.style].filter(Boolean).map(normStr)
+          const titleN = normStr(s.title || '')
+          if (keywords.some(k => titleN.includes(k))) score++
+        }
+
+        // 时间段
         if (filter.startTime || filter.endTime) {
-          if (!s.time) return false
-          // 取日期部分（前10字符），将 / 替换为 -
-          const showDate = s.time.slice(0, 10).replace(/\//g, '-')
-          if (filter.startTime && showDate < filter.startTime) return false
-          if (filter.endTime   && showDate > filter.endTime)   return false
+          if (s.time) {
+            const showDate = s.time.slice(0, 10).replace(/\//g, '-')
+            const inRange =
+              (!filter.startTime || showDate >= filter.startTime) &&
+              (!filter.endTime   || showDate <= filter.endTime)
+            if (inRange) score++
+          }
         }
 
-        return true
-      })
+        return score
+      }
+
+      // 解析演出时间戳，用于同分排序
+      function showTimestamp(s) {
+        if (!s.time) return Infinity
+        return new Date(s.time.replace(/\//g, '-')).getTime() || Infinity
+      }
+
+      const results = allShows
+        .map(s => ({ s, score: matchScore(s) }))
+        .filter(({ score }) => score > 0)           // 至少命中一个维度
+        .sort((a, b) =>
+          b.score - a.score ||                       // 匹配度降序
+          showTimestamp(a.s) - showTimestamp(b.s)    // 同分时间正序
+        )
+        .map(({ s }) => s)
+
       searchResults.value = results
     } else {
       // AI 未解析出有效条件，降级到关键字搜索
@@ -423,6 +473,21 @@ watch(displayShows, (shows) => {
 .search-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.search-back-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: 0 0.2rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.search-back-btn:hover {
+  color: var(--text-primary);
 }
 
 .search-btn {

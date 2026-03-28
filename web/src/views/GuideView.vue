@@ -92,13 +92,20 @@ import { ref, computed, onMounted, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/index.js'
 import { generateShowGuide } from '../utils/deepseek.js'
+import { allShows } from '../assets/data/index.js'
 
 const router = useRouter()
 const route = useRoute()
 const store = useUserStore()
 const showToast = inject('showToast')
 
-const itinerary = computed(() => store.itinerary)
+const itinerary = computed(() => {
+  return [...store.itinerary].sort((a, b) => {
+    const ta = a.date ? (new Date(a.date.replace(/\//g, '-')).getTime() || Infinity) : Infinity
+    const tb = b.date ? (new Date(b.date.replace(/\//g, '-')).getTime() || Infinity) : Infinity
+    return ta - tb
+  })
+})
 const expandedId = ref(null)
 
 // showId -> AI 生成的 timeline 数组（address 映射为 place）
@@ -121,11 +128,17 @@ async function fetchGuide(item) {
   const id = item.showId
   if (guideCache.value.has(id) || loadingIds.value.has(id)) return
   loadingIds.value = new Set([...loadingIds.value, id])
+
+  // item.address 可能因旧存量数据缺失，从原始数据源补全
+  const rawShow = allShows.find(s => s.event_id === id)
+  const address = item.address || rawShow?.address || ''
+
   const timeline = await generateShowGuide({
     title: item.tourName,
     artist: item.artist,
     city: item.city,
     venue: item.venue,
+    address,
     time: item.date,
   })
   // 将 address 字段映射为模板使用的 place 字段
