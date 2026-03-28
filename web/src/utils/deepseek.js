@@ -170,6 +170,114 @@ export async function generateShowGuide(show) {
 }
 
 /**
+ * 追问专用语义解析：基于上一轮 filter 上下文，理解相对语义（附近城市、换个风格、5月等）
+ * @param {string} text       - 用户追问文本，如 "看看附近城市" "换个风格" "5月的呢"
+ * @param {Object} prevFilter - 上一轮完整 filter { city, artist, style, startTime, endTime }
+ * @returns {Promise<{city, artist, style, startTime, endTime, parseStatus, invalidReason}>}
+ */
+export async function parseFollowUpQuery(text, prevFilter) {
+  const today = new Date()
+  const nowTime = today.toLocaleString('zh-CN', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+
+  const fallback = {
+    city: prevFilter?.city ?? null,
+    style: prevFilter?.style ?? null,
+    artist: prevFilter?.artist ?? null,
+    startTime: prevFilter?.startTime ?? null,
+    endTime: prevFilter?.endTime ?? null,
+    parseStatus: 'success',
+    invalidReason: null,
+  }
+
+  if (!text?.trim()) return fallback
+
+  const prompt = `你是一个专业的演出搜索语义解析助手，支持多轮上下文理解。
+
+【已有上下文（上一轮搜索条件）】
+城市：${prevFilter?.city ?? '无'}
+艺人：${prevFilter?.artist ?? '无'}
+风格：${prevFilter?.style ?? '无'}
+开始时间：${prevFilter?.startTime ?? '无'}
+结束时间：${prevFilter?.endTime ?? '无'}
+
+【当前用户追问】
+${text.trim()}
+
+【当前真实时间】
+${nowTime}
+
+请结合上下文，输出完整的新搜索条件。
+
+输出格式：
+{
+  "city": null | 字符串,
+  "artist": null | 字符串,
+  "style": null | 字符串,
+  "startTime": null | "YYYY-MM-DD",
+  "endTime": null | "YYYY-MM-DD",
+  "parseStatus": "success" | "invalid",
+  "invalidReason": null | 字符串
+}
+
+解析规则：
+1. 一周从周一到周日计算。
+2. 用户说"附近城市"，指上文城市的周边城市，保留上文风格、艺人、时间段，仅将 city 改为附近城市名。
+3. 用户说"换个风格/其他风格"，保留上文城市、艺人、时间段，将 style 置为 null（不限风格）或用户指定的新风格。
+4. 用户说"5月/下个月/再下个月"等时间，仅更新 startTime/endTime，其余字段继承上文。
+5. 用户明确查历史则允许过去时间，正常搜索默认从今天开始。
+6. 无效日期、脏话、无意义内容返回 invalid 并给出简短礼貌的 invalidReason。
+7. 只输出标准 JSON，无任何多余文字。`
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 8000)
+
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 200,
+        temperature: 0,
+      }),
+    })
+
+    if (!res.ok) return fallback
+
+    const data = await res.json()
+    const raw = data?.choices?.[0]?.message?.content?.trim() || ''
+    const jsonStr = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+    const parsed = JSON.parse(jsonStr)
+
+    if (parsed.parseStatus === 'invalid') {
+      return { city: null, style: null, artist: null, startTime: null, endTime: null, parseStatus: 'invalid', invalidReason: parsed.invalidReason ?? null }
+    }
+
+    return {
+      city:          parsed.city      ?? null,
+      style:         parsed.style     ?? null,
+      artist:        parsed.artist    ?? null,
+      startTime:     parsed.startTime ?? null,
+      endTime:       parsed.endTime   ?? null,
+      parseStatus:   'success',
+      invalidReason: null,
+    }
+  } catch {
+    return fallback
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
  * 根据上一轮搜索上下文动态生成3条追问建议
  * @param {Object} filter  - 上一轮解析出的 filter { city, style, artist, startTime, endTime }
  * @param {number} count   - 搜索结果数量

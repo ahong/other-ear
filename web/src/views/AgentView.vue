@@ -217,7 +217,7 @@
 import { ref, reactive, nextTick, inject } from 'vue'
 import { useUserStore } from '../stores/index.js'
 import { parseUserSearchText } from '../utils/aiSearchParser.js'
-import { getRecommendationReason, generateFollowUpQuestions } from '../utils/deepseek.js'
+import { getRecommendationReason, generateFollowUpQuestions, parseFollowUpQuery } from '../utils/deepseek.js'
 import { allShows } from '../assets/data/index.js'
 import { recognizeShowFromImage } from '../utils/showRecognizer.js'
 
@@ -512,17 +512,95 @@ function fillHint(text) {
   sendMessage()
 }
 
-// ── 追问点击：将上一轮条件前缀与追问文本拼接后发送 ──
-function sendFollowUp(text, lastFilter) {
+// ── 追问点击：基于上一轮上下文用专用解析，直接执行搜索 ──
+async function sendFollowUp(text, lastFilter) {
   if (isSearching.value) return
-  // 提取上一轮有效条件作为前缀（city / artist / style，不含时间——追问文本已含新时间）
-  const parts = []
-  if (lastFilter?.city)   parts.push(lastFilter.city)
-  if (lastFilter?.artist) parts.push(lastFilter.artist)
-  if (lastFilter?.style)  parts.push(lastFilter.style)
-  const query = parts.length ? `${parts.join(' ')} ${text}` : text
-  inputText.value = query
-  sendMessage()
+
+  // 1. 显示用户追问气泡（原始追问文本）
+  messages.value.push({ role: 'user', text })
+  await scrollToBottom()
+
+  // 2. 添加 thinking 占位
+  isSearching.value = true
+  const thinkingIdx = messages.value.length
+  messages.value.push({ role: 'ai', status: 'thinking' })
+  await scrollToBottom()
+
+  try {
+    // 3. 上下文感知解析（传入上一轮 filter，让 AI 理解相对含义）
+    const filter = await parseFollowUpQuery(text, lastFilter)
+
+    // invalid：直接展示原因
+    if (filter.parseStatus === 'invalid') {
+      messages.value[thinkingIdx] = {
+        role: 'ai',
+        status: 'text',
+        text: filter.invalidReason || '这个我看不懂，你可以换个说法',
+      }
+      return
+    }
+
+    // 4. 搜索（逻辑与 sendMessage 完全一致）
+    const results = runSearch(filter, text)
+
+    if (results.length === 0) {
+      const emptyMsg = {
+        role: 'ai',
+        status: 'results-empty',
+        text: '没找到相关演出，换个关键词试试？比如「上海电子」「下个月北京演出」',
+        followUps: [],
+        followUpsLoading: true,
+        lastFilter: filter,
+      }
+      messages.value[thinkingIdx] = emptyMsg
+
+      generateFollowUpQuestions(filter, 0).then(qs => {
+        const m = messages.value[thinkingIdx]
+        if (m && m.status === 'results-empty') {
+          messages.value.splice(thinkingIdx, 1, {
+            ...m,
+            followUps: Array.isArray(qs) && qs.length ? qs : [],
+            followUpsLoading: false,
+          })
+        }
+      })
+    } else {
+      const allShows = results
+      const aiMsg = {
+        role: 'ai',
+        status: 'results',
+        text: `为你找到 ${results.length} 场演出：`,
+        allShows,
+        visibleShows: allShows.slice(0, PAGE_SIZE),
+        activeIndex: 0,
+        followUps: [],
+        followUpsLoading: true,
+        lastFilter: filter,
+      }
+      messages.value[thinkingIdx] = aiMsg
+      fetchReasonForShow(allShows[0])
+
+      generateFollowUpQuestions(filter, results.length).then(qs => {
+        const m = messages.value[thinkingIdx]
+        if (m && m.status === 'results') {
+          messages.value.splice(thinkingIdx, 1, {
+            ...m,
+            followUps: Array.isArray(qs) && qs.length ? qs : [],
+            followUpsLoading: false,
+          })
+        }
+      })
+    }
+  } catch {
+    messages.value[thinkingIdx] = {
+      role: 'ai',
+      status: 'text',
+      text: '搜索出了点问题，请稍后再试',
+    }
+  } finally {
+    isSearching.value = false
+    await scrollToBottom()
+  }
 }
 
 // ── 票根识别 ──
