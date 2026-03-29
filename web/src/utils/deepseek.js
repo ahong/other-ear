@@ -194,10 +194,12 @@ export async function parseFollowUpQuery(text, prevFilter) {
 
   if (!text?.trim()) return fallback
 
+  const prevCityLabel = Array.isArray(prevFilter?.city) ? prevFilter.city.join('/') : (prevFilter?.city ?? '无')
+
   const prompt = `你是一个专业的演出搜索语义解析助手，支持多轮上下文理解。
 
 【已有上下文（上一轮搜索条件）】
-城市：${prevFilter?.city ?? '无'}
+城市：${prevCityLabel}
 艺人：${prevFilter?.artist ?? '无'}
 风格：${prevFilter?.style ?? '无'}
 开始时间：${prevFilter?.startTime ?? '无'}
@@ -209,27 +211,29 @@ ${text.trim()}
 【当前真实时间】
 ${nowTime}
 
-请结合上下文，输出完整的新搜索条件。
+【严格解析规则】
+1. 一周从周一到周日计算。
+2. 如果用户提到【附近城市、周边城市、周边、附近】：
+   - 基于上文城市，输出该城市周边真实存在的城市数组
+   - 必须是具体城市名称，禁止输出模糊文字如"厦门附近城市"
+   - 数量 3–5 个即可
+   - 示例：厦门 → ["泉州","福州","漳州","莆田"]；北京 → ["廊坊","天津","保定","唐山"]；上海 → ["苏州","昆山","嘉兴","杭州"]
+3. 用户提到时间（5月/下个月/再下个月等）→ 仅更新 startTime/endTime，其余继承上文。
+4. 用户提到风格/艺人 → 仅更新对应字段，其余继承上文。
+5. 其余所有字段必须继承上文，保持不变。
+6. 无效日期、脏话、无意义内容 → 返回 invalid 并给出简短礼貌原因。
+7. 只输出标准 JSON，无任何多余文字、无解释、无注释。
 
 输出格式：
 {
-  "city": null | 字符串,
+  "city": null | 字符串 | 字符串数组,
   "artist": null | 字符串,
   "style": null | 字符串,
   "startTime": null | "YYYY-MM-DD",
   "endTime": null | "YYYY-MM-DD",
   "parseStatus": "success" | "invalid",
   "invalidReason": null | 字符串
-}
-
-解析规则：
-1. 一周从周一到周日计算。
-2. 用户说"附近城市"，指上文城市的周边城市，保留上文风格、艺人、时间段，仅将 city 改为附近城市名。
-3. 用户说"换个风格/其他风格"，保留上文城市、艺人、时间段，将 style 置为 null（不限风格）或用户指定的新风格。
-4. 用户说"5月/下个月/再下个月"等时间，仅更新 startTime/endTime，其余字段继承上文。
-5. 用户明确查历史则允许过去时间，正常搜索默认从今天开始。
-6. 无效日期、脏话、无意义内容返回 invalid 并给出简短礼貌的 invalidReason。
-7. 只输出标准 JSON，无任何多余文字。`
+}`
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 8000)
@@ -246,7 +250,8 @@ ${nowTime}
         model: 'deepseek-chat',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 200,
-        temperature: 0,
+        temperature: 0.1,
+        response_format: { type: 'json_object' },
       }),
     })
 
@@ -261,8 +266,10 @@ ${nowTime}
       return { city: null, style: null, artist: null, startTime: null, endTime: null, parseStatus: 'invalid', invalidReason: parsed.invalidReason ?? null }
     }
 
+    // city 允许字符串或数组，原样保留
+    const city = parsed.city ?? null
     return {
-      city:          parsed.city      ?? null,
+      city,
       style:         parsed.style     ?? null,
       artist:        parsed.artist    ?? null,
       startTime:     parsed.startTime ?? null,
@@ -289,8 +296,9 @@ export async function generateFollowUpQuestions(filter, count) {
     hour: '2-digit', minute: '2-digit', hour12: false,
   })
 
+  const cityLabel = Array.isArray(filter.city) ? filter.city.join('/') : filter.city
   const params = [
-    filter.city      ? `城市：${filter.city}`            : null,
+    cityLabel      ? `城市：${cityLabel}`                 : null,
     filter.style     ? `风格：${filter.style}`           : null,
     filter.artist    ? `艺人：${filter.artist}`          : null,
     filter.startTime ? `开始时间：${filter.startTime}`   : null,

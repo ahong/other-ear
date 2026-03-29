@@ -249,8 +249,15 @@ function runSearch(filter, rawQuery) {
     // AND 匹配：所有非空维度必须同时满足
     function matchesAll(s) {
       if (filter.city) {
-        const fc = normStr(filter.city)
-        if (!normStr(s.city).includes(fc) && !normStr(s.venue || '').includes(fc)) return false
+        // city 可能是字符串或字符串数组（追问"附近城市"时返回数组）
+        const cityList = Array.isArray(filter.city) ? filter.city : [filter.city]
+        const sc = normStr(s.city)
+        const sv = normStr(s.venue || '')
+        const cityHit = cityList.some(c => {
+          const fc = normStr(c)
+          return sc.includes(fc) || sv.includes(fc)
+        })
+        if (!cityHit) return false
       }
       if (filter.style) {
         const fs = normStr(filter.style)
