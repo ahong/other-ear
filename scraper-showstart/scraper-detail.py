@@ -1,4 +1,4 @@
-# 上海演出抓取：100条+详情页信息+字段清洗+JSON存储（上海.json）
+# 北京民谣演出抓取：100条+详情页信息+字段清洗+JSON存储（北京民谣.json）
 import time
 import json
 import re
@@ -12,13 +12,13 @@ except Exception as e:
     print(f"❌ Playwright导入失败：{e}")
     exit()
 
-# 配置项（上海100条+2026全年+上海.json命名）
+# 配置项（北京民谣100条+2026全年+北京民谣.json命名）
 CONFIG = {
-    "list_url": "https://www.showstart.com/event/list?pageNo=1&pageSize=100&cityCode=21&timeRange=2026-01-01_2026-12-31",
+    "list_url": "https://www.showstart.com/event/list?pageNo=1&pageSize=20&cityCode=10&showStyle=1&timeRange=2026-01-01_2026-12-31",
     "chromium_path": "/Users/ahong/Library/Caches/ms-playwright/chromium-1117/chrome-mac/Chromium.app/Contents/MacOS/Chromium",
     "sleep_time": 8,
     "detail_sleep": 3,  # 详情页加载等待时间
-    "json_path": "上海.json"  # 上海专属JSON文件名
+    "json_path": "北京民谣.json"  # 北京民谣专属JSON文件名
 }
 
 # 存储最终演出数据
@@ -177,7 +177,7 @@ def get_detail_info(page: Page, event_id: str) -> dict:
     return detail_info
 
 def main():
-    print("🔍 启动秀动爬虫（上海100条+详情页+地址去查看地图版）")
+    print("🔍 启动秀动爬虫（北京民谣100条+详情页+地址去查看地图版）")
     print("================================")
     pw, browser, page = None, None, None
 
@@ -212,10 +212,10 @@ def main():
         pw.stop()
         return
 
-    # 步骤4：访问演出列表页（上海2026全年）
+    # 步骤4：访问演出列表页（北京民谣2026全年）
     try:
         page.goto(CONFIG["list_url"], wait_until="networkidle", timeout=120000)
-        print("✅ 步骤4：上海2026全年演出列表访问成功")
+        print("✅ 步骤4：北京民谣2026全年演出列表访问成功")
         print(f"ℹ️  等待{CONFIG['sleep_time']}秒，确保演出数据加载...")
         time.sleep(CONFIG["sleep_time"])
 
@@ -360,9 +360,9 @@ def main():
     except Exception as e:
         print(f"⚠️  步骤7警告：{str(e)[:50]}")
 
-    # 步骤8：保存为上海.json（JSON数组格式）
+    # 步骤8：保存为北京民谣.json（JSON数组格式）
     try:
-        print("\n✅ 步骤8：保存为上海.json文件...")
+        print("\n✅ 步骤8：保存为北京民谣.json文件...")
         # 确保数据为JSON数组格式
         json_data = final_performances if final_performances else []
         
@@ -371,7 +371,7 @@ def main():
             json.dump(json_data, f, ensure_ascii=False, indent=4)
         
         print(f"✅ JSON文件保存成功：{CONFIG['json_path']}")
-        print(f"📊 最终保存 {len(json_data)} 条2026年上海演出数据（含详情+风格标签）")
+        print(f"📊 最终保存 {len(json_data)} 条2026年北京民谣演出数据（含详情+风格标签）")
 
         # 打印前1条数据预览（简化版）
         if json_data:
@@ -390,7 +390,7 @@ def main():
             print(f"{idx}. ID:{item['event_id']} | 标题:{item['title'][:20]} | 艺人:{item['artist'][:10]} | 地址:{item['address'][:10]} | 风格:{item['styles']}")
 
     print("================================")
-    print("🔚 程序执行完毕（上海100条+详情页+地址去查看地图版）")
+    print("🔚 程序执行完毕（北京民谣100条+详情页+地址去查看地图版）")
 
 if __name__ == "__main__":
     main()
