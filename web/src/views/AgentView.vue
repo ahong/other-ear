@@ -182,6 +182,73 @@
               <div class="followup-chip followup-chip-ghost"></div>
             </div>
           </div>
+
+          <!-- 加入行程确认 + 行程卡片 -->
+          <div v-else-if="msg.status === 'itinerary-card'" class="itinerary-card-msg">
+            <div class="bubble ai-bubble itinerary-confirm">{{ msg.confirmText }}</div>
+            <div class="chat-tl-card" v-if="msg.item">
+              <div class="chat-tl-reminder">
+                ⏰ · <span v-if="formatMMDD(msg.item.date)">{{ formatMMDD(msg.item.date) }}</span>
+                {{ store.getReminderText(msg.item.ticketDate) }}
+              </div>
+              <div class="chat-tl-artist">{{ msg.item.artist }}</div>
+              <div class="chat-tl-tour">{{ msg.item.tourName }}</div>
+              <div class="chat-tl-meta">{{ msg.item.city }} · {{ msg.item.venue }} · {{ msg.item.date }}</div>
+              <div class="chat-tl-actions">
+                <button class="chat-action-btn secondary small" @click="handleGuideInChat(msg.item)">🗺️ 攻略</button>
+                <button class="chat-action-btn remove small" @click="store.removeFromItinerary(msg.item.showId); showToast('已从行程移除')">移除</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 聊天内攻略卡片 -->
+          <div v-else-if="msg.status === 'guide-card'" class="guide-card-msg">
+            <div class="bubble ai-bubble guide-confirm">🗺️ 为你生成 {{ msg.item?.tourName }} 的观演攻略</div>
+            <div class="chat-guide-card">
+              <div class="chat-guide-header">
+                <div class="chat-guide-artist">{{ msg.item?.artist }}</div>
+                <div class="chat-guide-tour">{{ msg.item?.tourName }}</div>
+                <div class="chat-guide-meta">{{ msg.item?.city }} · {{ msg.item?.venue }} · {{ msg.item?.date }}</div>
+              </div>
+              <div class="chat-ai-tip">
+                <template v-if="guideMap[msg.guideId]?.status === 'loading' || !guideMap[msg.guideId]">
+                  ⏳ AI 正在生成攻略…
+                </template>
+                <template v-else>
+                  🤖 AI 已为你生成 {{ msg.item?.city }} 观演攻略，包含交通/住宿/美食推荐
+                </template>
+              </div>
+              <div v-if="guideMap[msg.guideId]?.status === 'done'" class="chat-guide-timeline">
+                <div class="chat-timeline-line"></div>
+                <div
+                  v-for="(step, si) in guideMap[msg.guideId].steps"
+                  :key="si"
+                  class="chat-guide-step"
+                >
+                  <div class="chat-step-dot" :class="`dot-${si % 4}`"></div>
+                  <div class="chat-step-card">
+                    <div class="chat-step-header">
+                      <span class="chat-step-title" :class="`title-${si % 4}`">{{ step.title }}</span>
+                      <span class="chat-step-time">⏰ {{ step.time }}</span>
+                    </div>
+                    <div class="chat-step-place">📍 {{ step.place }}</div>
+                    <div class="chat-step-content">{{ step.content }}</div>
+                  </div>
+                </div>
+              </div>
+              <!-- 换一个攻略按钮：在时间线外部，避免被 padding-left 缩进 -->
+              <div v-if="guideMap[msg.guideId]?.status === 'done'" class="chat-guide-refresh-bar">
+                <button
+                  class="guide-refresh-btn"
+                  :disabled="guideMap[msg.guideId]?.refreshing"
+                  @click="refreshGuide(msg.guideId, msg.item)"
+                >
+                  🔄 换一个攻略
+                </button>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
@@ -217,7 +284,7 @@
 import { ref, reactive, nextTick, inject } from 'vue'
 import { useUserStore } from '../stores/index.js'
 import { parseUserSearchText } from '../utils/aiSearchParser.js'
-import { getRecommendationReason, generateFollowUpQuestions, parseFollowUpQuery } from '../utils/deepseek.js'
+import { getRecommendationReason, generateFollowUpQuestions, parseFollowUpQuery, generateShowGuide } from '../utils/deepseek.js'
 import { allShows } from '../assets/data/index.js'
 import { recognizeShowFromImage } from '../utils/showRecognizer.js'
 
@@ -355,13 +422,109 @@ function isShowEnded(show) {
   return showDate < today
 }
 
+function formatMMDD(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr.replace(/\//g, '-'))
+  if (isNaN(d.getTime())) return ''
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${mm}/${dd}`
+}
+
 function handleAddItinerary(show) {
   if (isInItinerary(show.event_id)) {
     showToast?.('已在行程中')
     return
   }
   const ok = store.addToItinerary(show)
-  if (ok) showToast?.(`✓ 已加入行程：${show.artist}`)
+  if (ok) {
+    // 取刚刚写入 store 的行程项（含 showId 等完整字段）
+    const item = store.itinerary.find(i => i.showId === show.event_id)
+    messages.value.push({
+      role: 'ai',
+      status: 'itinerary-card',
+      confirmText: '✅ 已成功加入行程',
+      item,
+    })
+    scrollToBottom()
+  }
+}
+
+// ── 聊天内攻略卡片 ──
+// guideMap: showId -> { status: 'loading' | 'done', steps: [] }
+const guideMap = reactive({})
+
+async function handleGuideInChat(item) {
+  const id = item.showId
+  // 已在加载或已完成：直接追加一条引用卡片
+  const existing = guideMap[id]
+
+  messages.value.push({
+    role: 'ai',
+    status: 'guide-card',
+    item,
+    guideId: id,
+  })
+  await scrollToBottom()
+
+  if (existing) return   // steps 由 guideMap 响应式驱动，已有则直接显示
+
+  guideMap[id] = { status: 'loading', steps: [] }
+
+  const rawShow = allShows.find(s => s.event_id === id)
+  const address = item.address || rawShow?.address || ''
+
+  const timeline = await generateShowGuide({
+    title: item.tourName,
+    artist: item.artist,
+    city: item.city,
+    venue: item.venue,
+    address,
+    time: item.date,
+  })
+  const steps = timeline.map(s => ({ ...s, place: s.address || s.place || '' }))
+  guideMap[id] = {
+    status: 'done',
+    steps: steps.length > 0 ? steps : [
+      { time: '14:00', place: `${item.city}高铁/机场`, title: '抵达', content: `乘坐交通工具前往${item.city}` },
+      { time: '17:00', place: `${item.venue}附近`, title: '住宿', content: '提前预订周边酒店/青旅' },
+      { time: '18:30', place: `${item.city}特色餐厅`, title: '美食', content: '探索当地特色美食' },
+      { time: '20:00', place: item.venue, title: '演出', content: `${item.artist} · ${item.tourName}` },
+    ],
+  }
+  await scrollToBottom()
+}
+
+// ── 换一个攻略：在原卡片内重新生成（差异化提示词）──
+async function refreshGuide(guideId, item) {
+  if (guideMap[guideId]?.refreshing) return
+  guideMap[guideId] = { ...guideMap[guideId], status: 'loading', refreshing: true, steps: [] }
+  await scrollToBottom()
+
+  const rawShow = allShows.find(s => s.event_id === guideId)
+  const address = item.address || rawShow?.address || ''
+
+  const timeline = await generateShowGuide({
+    title: item.tourName,
+    artist: item.artist,
+    city: item.city,
+    venue: item.venue,
+    address,
+    time: item.date,
+  }, true)  // refresh = true，注入差异化指令
+
+  const steps = timeline.map(s => ({ ...s, place: s.address || s.place || '' }))
+  guideMap[guideId] = {
+    status: 'done',
+    refreshing: false,
+    steps: steps.length > 0 ? steps : [
+      { time: '14:00', place: `${item.city}高铁/机场`, title: '抵达', content: `乘坐交通工具前往${item.city}` },
+      { time: '17:00', place: `${item.venue}附近`, title: '住宿', content: '提前预订周边酒店/青旅' },
+      { time: '18:30', place: `${item.city}特色餐厅`, title: '美食', content: '探索当地特色美食' },
+      { time: '20:00', place: item.venue, title: '演出', content: `${item.artist} · ${item.tourName}` },
+    ],
+  }
+  await scrollToBottom()
 }
 
 // ── 轮播 touch 手势 ──
@@ -1293,5 +1456,230 @@ async function handleTicketFile(e) {
 @keyframes shimmer {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+
+/* ── 行程卡片（聊天内） ── */
+.itinerary-card-msg,
+.guide-card-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.itinerary-confirm,
+.guide-confirm {
+  align-self: flex-start;
+}
+
+.chat-tl-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 0.85rem;
+  margin-left: 0.4rem;
+}
+
+.chat-tl-reminder {
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-bottom: 0.3rem;
+}
+
+.chat-tl-artist {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.chat-tl-tour {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  margin-top: 0.1rem;
+}
+
+.chat-tl-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin: 0.4rem 0 0.6rem;
+}
+
+.chat-tl-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.chat-action-btn {
+  background: var(--primary);
+  border: none;
+  border-radius: 20px;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: #0f1117;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.chat-action-btn:active {
+  transform: scale(0.95);
+}
+
+.chat-action-btn.secondary {
+  background: var(--bg-item);
+  color: var(--text-secondary);
+  border: 1px solid #2a2f3a;
+}
+
+.chat-action-btn.remove {
+  background: rgba(255, 60, 60, 0.1);
+  color: #ff7070;
+  border: 1px solid rgba(255, 60, 60, 0.2);
+}
+
+.chat-action-btn.small {
+  padding: 0.28rem 0.65rem;
+  font-size: 0.68rem;
+}
+
+/* ── 攻略卡片（聊天内） ── */
+.chat-guide-card {
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  border-radius: 20px;
+  overflow: hidden;
+  margin-left: 0.4rem;
+}
+
+.chat-guide-header {
+  padding: 0.9rem 1rem 0.7rem;
+  border-bottom: 1px solid #1e2129;
+}
+
+.chat-guide-artist {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.chat-guide-tour {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 0.15rem;
+}
+
+.chat-guide-meta {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 0.3rem;
+}
+
+.chat-ai-tip {
+  background: rgba(255, 107, 107, 0.06);
+  border-left: 2px solid var(--primary);
+  border-radius: 0 10px 10px 0;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  margin: 0.8rem 0.8rem 0.6rem;
+  line-height: 1.5;
+}
+
+.chat-guide-timeline {
+  position: relative;
+  padding: 0 1rem 1rem 2.4rem;
+}
+
+.chat-timeline-line {
+  position: absolute;
+  left: 1.2rem;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  background: linear-gradient(to bottom, rgba(255,107,107,0.6), rgba(255,107,107,0.1));
+  border-radius: 2px;
+}
+
+.chat-guide-step {
+  position: relative;
+  padding-left: 1.2rem;
+  margin-bottom: 0.8rem;
+}
+
+.chat-guide-step:last-child {
+  margin-bottom: 0;
+}
+
+.chat-step-dot {
+  position: absolute;
+  left: -4px;
+  top: 7px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.chat-step-card {
+  background: var(--bg-item);
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+}
+
+.chat-step-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.3rem;
+}
+
+.chat-step-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.chat-step-time {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.chat-step-place {
+  font-size: 0.73rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.2rem;
+}
+
+.chat-step-content {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.chat-guide-refresh-bar {
+  display: flex;
+  justify-content: center;
+  padding: 0.75rem 1rem 0.9rem;
+  border-top: 1px solid #1e2129;
+  margin-top: 0.2rem;
+}
+
+.guide-refresh-btn {
+  background: var(--bg-item);
+  border: 1px solid #2a2f3a;
+  border-radius: 20px;
+  padding: 0.35rem 1rem;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.guide-refresh-btn:active {
+  transform: scale(0.95);
+}
+
+.guide-refresh-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 </style>

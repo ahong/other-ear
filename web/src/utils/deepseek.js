@@ -109,13 +109,17 @@ function buildPrompt(userPrefs, show) {
 
 /**
  * 调用 DeepSeek API 生成观演攻略时间线
- * @param {Object} show - 演出信息 { title, artist, city, venue, address, time }
+ * @param {Object} show    - 演出信息 { title, artist, city, venue, address, time }
+ * @param {boolean} refresh - 是否重新生成（传 true 时注入差异化指令，避免与上次内容重复）
  * @returns {Promise<Array>} 时间线数组，失败时返回空数组
  */
-export async function generateShowGuide(show) {
+export async function generateShowGuide(show, refresh = false) {
   const { title, artist, city, venue, address, time } = show
+  const refreshHint = refresh
+    ? '\n⚠️ 本次请生成一份与上一次完全不同视角的攻略：推荐不同的交通方式、不同区域的住宿、不同餐厅或美食街、不同的观演小贴士。避免重复上次内容，确保两次攻略有明显差异。\n'
+    : ''
   const prompt = [
-    '你是一个演出观演攻略生成助手。请根据以下演出信息，生成一份当天的观演时间线攻略。',
+    `你是一个演出观演攻略生成助手。请根据以下演出信息，生成一份当天的观演时间线攻略。${refreshHint}`,
     '',
     `演出名称：${title || '未知'}`,
     `演出艺人：${artist || '未知'}`,
