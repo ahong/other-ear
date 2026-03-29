@@ -251,37 +251,80 @@ const GENRES = [...ALL_STYLES]
   .filter(s => !EXCLUDED_GENRES.has(s))
   .sort((a, b) => (genreHotMap[b] ?? 0) - (genreHotMap[a] ?? 0))
 
+// 13 位优先艺人：sub 为唯一显示标签，genres 为允许匹配的风格键集合
+// genres 值必须严格匹配 ALL_STYLES 实际存在的粗粒度枚举（摇滚/民谣/独立/朋克）
+// 旧数据（allShows）对这些艺人完全无效，所有逻辑只使用此处定义的字段
+const PRIORITY_ARTISTS = [
+  { name: '万能青年旅店', sub: '独立摇滚',    genres: ['摇滚'] },
+  { name: '二手玫瑰乐队',     sub: '民谣摇滚',    genres: ['摇滚'] },
+  { name: '痛仰',         sub: '硬摇滚',      genres: ['摇滚'] },
+  { name: '新裤子',       sub: '朋克摇滚',    genres: ['摇滚'] },
+  { name: '草东没有派对', sub: '另类摇滚',    genres: ['摇滚'] },
+  { name: 'deca joins',   sub: '独立/慵懒',   genres: ['独立'] },
+  { name: '声音玩具',     sub: '独立摇滚',    genres: ['独立', '摇滚'] },
+  { name: '海朋森',       sub: '后朋克/独立', genres: ['独立', '后朋克'] },
+  { name: '法兹乐队',     sub: '后朋克/独立',      genres: ['后朋克', '独立'] },
+  { name: '五条人',       sub: '民谣摇滚',    genres: ['民谣'] },
+  { name: '张玮玮',       sub: '民谣',        genres: ['民谣'] },
+  { name: '小河',         sub: '实验民谣',    genres: ['民谣'] },
+  { name: '周云蓬',       sub: '民谣',        genres: ['民谣'] },
+]
+// 快速查找表：指定艺人名 → 配置项（同时兼容 allShows 中"二手玫瑰乐队"的别名）
+const PRIORITY_MAP = new Map([
+  ...PRIORITY_ARTISTS.map(a => [a.name, a]),
+  ['二手玫瑰乐队', PRIORITY_ARTISTS.find(a => a.name === '二手玫瑰')],
+])
+
 // 根据选中风格，从真实演出数据中聚合艺人池
-// 每个艺人记录：{ name, sub(风格标签), genre(所属第一个匹配风格) }
-// artist 字段若含 / 分隔符，则拆分为多个独立艺人，每个人保留相同风格标签
+// 每个艺人记录：{ name, sub(风格标签), genre(用于 toggleGenre 清除判断) }
 const artistsPool = computed(() => {
   if (selectedGenres.value.length === 0) return []
-  const map = new Map()
+  const selected = new Set(selectedGenres.value)
+
+  // ── 1. 指定艺人：完全基于 PRIORITY_MAP，绝不读取 allShows ──
+  const priority = PRIORITY_ARTISTS
+    .filter(a => a.genres.some(g => selected.has(g)))
+    .map(a => ({
+      name: a.name,
+      sub: a.sub,
+      // genre 取第一个与用户已选有交集的风格键，供 toggleGenre 清除逻辑使用
+      genre: a.genres.find(g => selected.has(g)),
+    }))
+
+  // ── 2. 普通艺人：来自 allShows，跳过已在指定列表中的名字 ──
+  const normalMap = new Map()
   allShows.forEach(show => {
     if (!show.artist) return
-    const matchedGenre = (show.styles || []).find(s => selectedGenres.value.includes(s))
+    const matchedGenre = (show.styles || []).find(s => selected.has(s))
     if (!matchedGenre) return
     const sub = (show.styles || []).join('/')
-    // 按 / 拆分多人演出，每个名字单独处理
-    const names = show.artist.split('/').map(n => n.trim()).filter(n => n.length > 0)
-    names.forEach(name => {
-      if (!map.has(name)) {
-        map.set(name, { name, sub, genre: matchedGenre })
+    show.artist.split('/').map(n => n.trim()).filter(n => n).forEach(name => {
+      // 指定艺人名在此管道中完全跳过
+      if (!normalMap.has(name) && !PRIORITY_MAP.has(name)) {
+        normalMap.set(name, { name, sub, genre: matchedGenre })
       }
     })
   })
-  // 按 artistHotMap 热度降序排列，去掉名字过长的（通常是宣传标题）
-  return Array.from(map.values())
+
+  const normal = Array.from(normalMap.values())
     .filter(a => a.name.length <= 16)
     .sort((a, b) => (artistHotMap[b.name] ?? 0) - (artistHotMap[a.name] ?? 0))
     .slice(0, 20)
+
+  return [...priority, ...normal]
 })
 
 // ============ 状态 ============
 const selectedCities = ref([...store.profile.cities])
 const selectedGenres = ref([...store.profile.genres])
-// 从真实数据中还原已保存的艺人信息
+// 从已保存数据中还原已选艺人信息
+// 指定艺人：使用 PRIORITY_MAP 中的 sub/genres，绝不读取 allShows
+// 普通艺人：从 allShows 还原
 const selectedArtists = ref(store.profile.artists.map(name => {
+  const priority = PRIORITY_MAP.get(name)
+  if (priority) {
+    return { name, sub: priority.sub, genre: priority.genres[0] || '' }
+  }
   const show = allShows.find(s => s.artist === name)
   return {
     name,
